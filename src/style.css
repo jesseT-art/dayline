@@ -3265,10 +3265,6 @@ body {
   will-change: transform, opacity, box-shadow;
 }
 
-:root[data-platform="android"] {
-  --glass-filter: blur(21px) saturate(165%);
-}
-
 :root[data-platform="android"] .task-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 72px;

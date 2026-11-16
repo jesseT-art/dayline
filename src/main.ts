@@ -70,6 +70,8 @@ let deferredInstallPrompt: BeforeInstallPromptEvent | null = null
 let toastTimer: number | null = null
 let highlightTimer: number | null = null
 let highlightedTaskId: string | null = null
+const modalHistory: string[] = []
+let suppressedPopstates = 0
 let draft: ComposerDraft = createDraft(viewDate)
 
 app.innerHTML = `
@@ -228,6 +230,7 @@ document.addEventListener('submit', handleSubmit)
 document.addEventListener('keydown', handleKeydown)
 document.addEventListener('gesturestart', preventZoomGesture, { passive: false })
 document.addEventListener('dblclick', preventZoomGesture, { passive: false })
+window.addEventListener('popstate', handleModalBack)
 
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault()
@@ -1313,20 +1316,46 @@ function applyTheme(): void {
 function showModal(id: string): void {
   const modal = document.getElementById(id)
   if (!modal) return
+  const wasHidden = modal.hidden
   modal.hidden = false
   void modal.offsetWidth
   modal.classList.add('is-open')
   document.body.classList.add('modal-open')
+  if (wasHidden && !modalHistory.includes(id)) {
+    modalHistory.push(id)
+    history.pushState({ ...history.state, daylineModal: id }, '', location.href)
+  }
 }
 
-function hideModal(id: string): void {
+function hideModal(id: string, fromPopstate = false): void {
   const modal = document.getElementById(id)
   if (!modal) return
+  const wasOpen = !modal.hidden
   modal.classList.remove('is-open')
+  const index = modalHistory.lastIndexOf(id)
+  if (index >= 0) modalHistory.splice(index, 1)
+  if (
+    wasOpen &&
+    !fromPopstate &&
+    history.state?.daylineModal === id &&
+    index === modalHistory.length
+  ) {
+    suppressedPopstates += 1
+    history.back()
+  }
   window.setTimeout(() => {
     modal.hidden = true
     if (!document.querySelector('.modal-layer:not([hidden])')) document.body.classList.remove('modal-open')
   }, 180)
+}
+
+function handleModalBack(): void {
+  if (suppressedPopstates > 0) {
+    suppressedPopstates -= 1
+    return
+  }
+  const openModal = [...document.querySelectorAll<HTMLElement>('.modal-layer:not([hidden])')].at(-1)
+  if (openModal?.id) hideModal(openModal.id, true)
 }
 
 function showToast(message: string): void {
