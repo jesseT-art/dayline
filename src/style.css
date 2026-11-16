@@ -2814,8 +2814,9 @@ body {
   border-radius: 21px;
   background:
     linear-gradient(112deg, var(--accent), var(--accent-2) 48%, var(--accent-3));
+  appearance: none;
+  -webkit-appearance: none;
   box-shadow:
-    0 15px 38px color-mix(in srgb, var(--accent) 27%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.68),
     inset 0 -1px 0 rgba(10, 24, 47, 0.13);
   color: white;
@@ -3052,7 +3053,6 @@ body {
 .choice-button.is-selected {
   background: linear-gradient(135deg, var(--accent), var(--accent-2) 52%, var(--accent-3));
   box-shadow:
-    0 7px 18px color-mix(in srgb, var(--accent) 21%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.44);
 }
 
@@ -3091,8 +3091,9 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.42);
   border-radius: 17px;
   background: linear-gradient(112deg, var(--accent), var(--accent-2) 48%, var(--accent-3));
+  appearance: none;
+  -webkit-appearance: none;
   box-shadow:
-    0 12px 28px color-mix(in srgb, var(--accent) 23%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.66);
   color: white;
   font-size: 13px;

@@ -932,9 +932,9 @@ function openQuickAdd(): void {
   draft = createDraft(viewDate)
   renderComposer()
   showModal('quickAddModal')
-  window.setTimeout(() => {
-    document.querySelector<HTMLInputElement>('#taskTitle')?.focus({ preventScroll: true })
-  }, 190)
+  const titleInput = document.querySelector<HTMLInputElement>('#taskTitle')
+  titleInput?.focus()
+  titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
 function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void {
@@ -1122,7 +1122,8 @@ function showModal(id: string): void {
   const modal = document.getElementById(id)
   if (!modal) return
   modal.hidden = false
-  requestAnimationFrame(() => modal.classList.add('is-open'))
+  void modal.offsetWidth
+  modal.classList.add('is-open')
   document.body.classList.add('modal-open')
 }
 
