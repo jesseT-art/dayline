@@ -1598,8 +1598,8 @@ button svg {
 .toast {
   position: fixed;
   z-index: 90;
+  top: calc(10px + env(safe-area-inset-top, 0px));
   right: 18px;
-  bottom: calc(18px + var(--safe-bottom));
   left: 18px;
   display: flex;
   align-items: center;
@@ -1615,7 +1615,8 @@ button svg {
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.24);
   color: #f6f3eb;
   opacity: 0;
-  transform: translate3d(0, 10px, 0) scale(0.98);
+  pointer-events: none;
+  transform: translate3d(0, -10px, 0) scale(0.98);
   transition:
     transform 180ms ease,
     opacity 160ms ease;
@@ -1630,19 +1631,6 @@ button svg {
 .toast span {
   font-size: 12px;
   line-height: 1.45;
-}
-
-.toast button {
-  flex: 0 0 auto;
-  min-height: 34px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #f0a259;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 @media (hover: hover) {
