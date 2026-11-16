@@ -101,6 +101,7 @@ html {
   min-height: 100%;
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
+  touch-action: pan-x pan-y;
 }
 
 body {
@@ -117,6 +118,8 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+  touch-action: pan-x pan-y;
 }
 
 body.modal-open {
@@ -128,6 +131,7 @@ button,
 input,
 textarea {
   font: inherit;
+  touch-action: manipulation;
 }
 
 button {
@@ -191,7 +195,8 @@ button svg {
   display: block;
   width: 32px;
   height: 32px;
-  color: #171714;
+  overflow: hidden;
+  border-radius: 9px;
 }
 
 .brand-mark svg {
@@ -728,7 +733,7 @@ button svg {
   left: 0;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--danger);
+  background: linear-gradient(180deg, #ff9a5d, #ef5875 52%, #b95dd7);
   content: "";
 }
 
@@ -824,8 +829,10 @@ button svg {
   flex: 0 0 auto;
   padding: 2px 5px;
   border-radius: 5px;
-  background: var(--danger-soft);
-  color: var(--danger);
+  border: 0;
+  background: linear-gradient(135deg, #ff9b5e, #ef5579 56%, #ce5fcd);
+  box-shadow: 0 2px 6px rgba(222, 74, 107, 0.2);
+  color: white;
   font-size: 9px;
   font-weight: 750;
   letter-spacing: 0.02em;
@@ -862,20 +869,34 @@ button svg {
   color: var(--muted);
   font-size: 9px;
   font-weight: 650;
+  line-height: 1;
+}
+
+.meta-chip {
+  border: 0;
+  background: linear-gradient(135deg, #26b8bd, #3389e9);
+  box-shadow: 0 2px 6px rgba(43, 139, 215, 0.17);
+  color: white;
 }
 
 .meta-chip.overdue {
-  background: var(--danger-soft);
-  color: var(--danger);
+  background: linear-gradient(135deg, #ffad4f, #ed6858 62%, #d85d89);
+  box-shadow: 0 2px 6px rgba(219, 93, 79, 0.18);
+  color: white;
 }
 
 .status-chip.is-completed {
-  background: var(--success-soft);
-  color: var(--success);
+  border: 0;
+  background: linear-gradient(135deg, #37b386, #27999b);
+  box-shadow: 0 2px 7px rgba(39, 157, 120, 0.18);
+  color: white;
 }
 
 .status-chip.is-skipped {
-  color: var(--ink-secondary);
+  border: 0;
+  background: linear-gradient(135deg, #a17ae6, #6e64d7);
+  box-shadow: 0 2px 7px rgba(126, 101, 210, 0.18);
+  color: white;
 }
 
 .task-menu-button {
@@ -2188,13 +2209,13 @@ button svg {
 }
 
 .meta-chip:not(.overdue) {
-  background: var(--teal-soft);
-  color: var(--teal);
+  background: linear-gradient(135deg, #21b8bf, #347fe4);
+  color: white;
 }
 
 .status-chip.is-skipped {
-  background: var(--violet-soft);
-  color: var(--violet);
+  background: linear-gradient(135deg, #a17ae6, #6e64d7);
+  color: white;
 }
 
 .task-menu-button {
@@ -2238,8 +2259,8 @@ button svg {
   padding: 0 5px;
   place-items: center;
   border-radius: 99px;
-  background: var(--success-soft);
-  color: var(--success);
+  background: linear-gradient(135deg, #42bb8f, #2c9da3);
+  color: white;
   font-size: 8px;
   font-style: normal;
   font-weight: 740;
@@ -2252,7 +2273,7 @@ button svg {
 }
 
 .finished-group .task-row.high-priority::before {
-  background: color-mix(in srgb, var(--success) 60%, var(--danger));
+  background: linear-gradient(180deg, #60c89c, #268d90);
 }
 
 .restore-button {
@@ -2367,5 +2388,203 @@ button svg {
 
   .content {
     padding-top: 12px;
+  }
+}
+
+@keyframes dashboard-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes ring-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.76) rotate(-22deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes bar-grow {
+  from {
+    opacity: 0.25;
+    transform: scaleY(0.08);
+  }
+  to {
+    opacity: 0.92;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes row-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 7px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes complete-land {
+  0% {
+    opacity: 0.45;
+    transform: translate3d(0, -16px, 0) scale(0.98);
+  }
+  58% {
+    transform: translate3d(0, 2px, 0) scale(1.004);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes success-glow {
+  0%,
+  100% {
+    box-shadow: 0 2px 8px rgba(39, 58, 79, 0.035);
+  }
+  45% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--success) 25%, transparent),
+      0 8px 24px color-mix(in srgb, var(--success) 16%, transparent);
+  }
+}
+
+@keyframes soft-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+.today-dashboard {
+  animation: dashboard-enter 320ms cubic-bezier(0.2, 0.78, 0.25, 1) both;
+}
+
+.progress-ring {
+  transform-origin: center;
+  animation: ring-enter 420ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+
+.week-track i {
+  transform-origin: center bottom;
+  animation: bar-grow 480ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.week-day:nth-child(1) .week-track i {
+  animation-delay: 30ms;
+}
+
+.week-day:nth-child(2) .week-track i {
+  animation-delay: 50ms;
+}
+
+.week-day:nth-child(3) .week-track i {
+  animation-delay: 70ms;
+}
+
+.week-day:nth-child(4) .week-track i {
+  animation-delay: 90ms;
+}
+
+.week-day:nth-child(5) .week-track i {
+  animation-delay: 110ms;
+}
+
+.week-day:nth-child(6) .week-track i {
+  animation-delay: 130ms;
+}
+
+.week-day:nth-child(7) .week-track i {
+  animation-delay: 150ms;
+}
+
+.task-row {
+  animation: row-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--row-index, 0) * 20ms);
+}
+
+.task-row.is-highlighted.is-completed {
+  animation: complete-land 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.task-row.is-highlighted.is-completed::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  content: "";
+  animation: success-glow 760ms ease-out both;
+}
+
+.task-row.is-highlighted:not(.is-completed) {
+  animation: soft-pulse 650ms ease-out both;
+}
+
+.task-row.is-highlighted:not(.is-completed)::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  content: "";
+}
+
+.overview-link,
+.text-button {
+  transition:
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.overview-link:active,
+.text-button:active {
+  transform: translate3d(1px, 0, 0);
+}
+
+.brand-mark svg,
+.icon-button svg,
+.complete-button svg,
+.task-menu-button svg,
+.back-today svg,
+.overview-link svg,
+.text-button svg,
+.add-button svg,
+.restore-button svg,
+.action-list button svg {
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.priority-mark,
+.meta-chip,
+.status-chip {
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .quick-entry input,
+  .note-field textarea,
+  .date-choice input {
+    font-size: 16px;
+  }
+
+  .date-choice input {
+    max-width: 118px;
   }
 }

@@ -39,7 +39,7 @@ type BeforeInstallPromptEvent = Event & {
 }
 
 const icons = {
-  brand: `<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="currentColor"/><path d="M9 11h14M9 16h9M9 21h11" stroke="#f8f5ec" stroke-width="2.4" stroke-linecap="round"/><circle cx="23" cy="21" r="2.8" fill="#f0a259"/></svg>`,
+  brand: `<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="dayline-brand-gradient" x1="4" y1="2" x2="29" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#22D7C1"/><stop offset=".48" stop-color="#3388F6"/><stop offset="1" stop-color="#765CF5"/></linearGradient><radialGradient id="dayline-brand-shine" cx="0" cy="0" r="1" gradientTransform="translate(7 4) rotate(42) scale(25)"><stop stop-color="white" stop-opacity=".38"/><stop offset="1" stop-color="white" stop-opacity="0"/></radialGradient></defs><rect width="32" height="32" rx="9" fill="url(#dayline-brand-gradient)"/><rect width="32" height="32" rx="9" fill="url(#dayline-brand-shine)"/><path d="M9 10h14M9 16h8M9 22h4" stroke="white" stroke-width="2.4" stroke-linecap="round"/><path d="m16 21.5 2.6 2.5 4.2-5" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   calendar: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4.5 9.5h15M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8 3.5c0-.58-.06-1.14-.17-1.68l2.02-1.57-2-3.46-2.38.96A8.2 8.2 0 0 0 15 4.92L14.66 2.4h-4L10.3 4.92c-.9.37-1.72.84-2.47 1.33l-2.38-.96-2 3.46 2.02 1.57A8.34 8.34 0 0 0 5.3 12c0 .58.06 1.14.17 1.68L3.45 15.25l2 3.46 2.38-.96c.75.49 1.57.96 2.47 1.33l.36 2.52h4l.36-2.52c.9-.37 1.72-.84 2.47-1.33l2.38.96 2-3.46-2.02-1.57c.11-.54.17-1.1.17-1.68Z" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
@@ -66,6 +66,8 @@ let advancedOpen = false
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null
 let lastDeleted: DeletedSnapshot | null = null
 let toastTimer: number | null = null
+let highlightTimer: number | null = null
+let highlightedTaskId: string | null = null
 let draft: ComposerDraft = createDraft(viewDate)
 
 app.innerHTML = `
@@ -176,6 +178,8 @@ document.addEventListener('input', handleInput)
 document.addEventListener('change', handleChange)
 document.addEventListener('submit', handleSubmit)
 document.addEventListener('keydown', handleKeydown)
+document.addEventListener('gesturestart', preventZoomGesture, { passive: false })
+document.addEventListener('dblclick', preventZoomGesture, { passive: false })
 
 window.addEventListener('beforeinstallprompt', (event) => {
   event.preventDefault()
@@ -420,7 +424,9 @@ function renderTasks(): void {
 
   host.innerHTML = `
     <div class="task-group">
-      ${sortTasks(pending).map((task) => taskRow(task, isToday ? 'today' : 'history')).join('')}
+      ${sortTasks(pending)
+        .map((task, index) => taskRow(task, isToday ? 'today' : 'history', index))
+        .join('')}
     </div>
     ${
       finished.length
@@ -429,7 +435,9 @@ function renderTasks(): void {
             <span></span><strong>${isToday ? '已完成' : '完成情况'}</strong><em>${finished.length}</em><span></span>
           </div>
           <div class="task-group finished-group">
-            ${sortTasks(finished).map((task) => taskRow(task, isToday ? 'today' : 'history')).join('')}
+            ${sortTasks(finished)
+              .map((task, index) => taskRow(task, isToday ? 'today' : 'history', index))
+              .join('')}
           </div>
         `
         : ''
@@ -437,8 +445,9 @@ function renderTasks(): void {
   `
 }
 
-function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string {
+function taskRow(task: Task, context: 'today' | 'history' | 'overview', index = 0): string {
   const statusClass = task.status === 'active' ? '' : `is-${task.status}`
+  const highlightClass = task.id === highlightedTaskId ? 'is-highlighted' : ''
   const statusLabel =
     task.status === 'completed' ? '已完成' : task.status === 'skipped' ? '今日无需完成' : ''
   const source = context === 'today' ? sourceLabel(task.dueDate) : ''
@@ -460,7 +469,7 @@ function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string 
       : ''
 
   return `
-    <article class="task-row ${task.priority === 'high' ? 'high-priority' : ''} ${statusClass}" data-task-id="${task.id}">
+    <article class="task-row ${task.priority === 'high' ? 'high-priority' : ''} ${statusClass} ${highlightClass}" data-task-id="${task.id}" style="--row-index:${Math.min(index, 8)}">
       <button
         class="complete-button"
         type="button"
@@ -549,19 +558,19 @@ function renderOverview(): void {
     <div class="overview-section">
       <div class="overview-label"><span>待完成</span><em>${active.length}</em></div>
       <div class="overview-list">
-        ${active.length ? sortTasks(active).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('没有待完成的任务')}
+        ${active.length ? sortTasks(active).map((task, index) => taskRow(task, 'overview', index)).join('') : emptyOverview('没有待完成的任务')}
       </div>
     </div>
     <div class="overview-section">
       <div class="overview-label"><span>已完成</span><em>${completed.length}</em></div>
       <div class="overview-list">
-        ${completed.length ? sortTasks(completed).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('今天还没有完成记录')}
+        ${completed.length ? sortTasks(completed).map((task, index) => taskRow(task, 'overview', index)).join('') : emptyOverview('今天还没有完成记录')}
       </div>
     </div>
     <div class="overview-section">
       <div class="overview-label"><span>今日无需完成</span><em>${skipped.length}</em></div>
       <div class="overview-list">
-        ${skipped.length ? sortTasks(skipped).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('没有标记为无需完成的任务')}
+        ${skipped.length ? sortTasks(skipped).map((task, index) => taskRow(task, 'overview', index)).join('') : emptyOverview('没有标记为无需完成的任务')}
       </div>
     </div>
   `
@@ -825,6 +834,10 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 }
 
+function preventZoomGesture(event: Event): void {
+  if (event.cancelable) event.preventDefault()
+}
+
 function addTask(): void {
   const titleInput = document.querySelector<HTMLInputElement>('#taskTitle')
   const dateInput = document.querySelector<HTMLInputElement>('#taskDate')
@@ -857,8 +870,9 @@ function addTask(): void {
     reconcileWeeklyTasks(data)
     persist()
   } else {
+    const taskId = newId()
     data.tasks.push({
-      id: newId(),
+      id: taskId,
       title,
       note: draft.note,
       priority: draft.priority,
@@ -868,12 +882,14 @@ function addTask(): void {
       statusAt: null
     })
     persist()
+    highlightedTaskId = taskId
   }
 
   const savedDate = draft.dueDate
   advancedOpen = false
   draft = createDraft(viewDate)
   render()
+  if (highlightedTaskId) scheduleHighlightClear(highlightedTaskId)
   titleInput?.focus()
   if (savedDate !== viewDate) {
     showToast(`${savedRepeat ? '重复清单' : '清单'}已记在 ${shortDate(savedDate)}`)
@@ -890,7 +906,9 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     task.statusAt = new Date().toISOString()
     persist()
     hideModal('taskModal')
+    highlightedTaskId = task.id
     render()
+    scheduleHighlightClear(task.id)
     navigator.vibrate?.(8)
     showToast('已完成 · 已移至清单底部')
     return
@@ -917,7 +935,9 @@ function restoreTask(taskId: string): void {
   task.statusAt = null
   persist()
   hideModal('taskModal')
+  highlightedTaskId = task.id
   render()
+  scheduleHighlightClear(task.id)
   if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
   showToast('已恢复为待完成')
 }
@@ -1028,6 +1048,16 @@ function sevenDayOverview(): Array<{
               : 'var(--coral)'
     return { ...day, height, color }
   })
+}
+
+function scheduleHighlightClear(taskId: string): void {
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+  highlightTimer = window.setTimeout(() => {
+    document
+      .querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
+      ?.classList.remove('is-highlighted')
+    if (highlightedTaskId === taskId) highlightedTaskId = null
+  }, 820)
 }
 
 function persist(): void {
