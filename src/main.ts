@@ -45,6 +45,7 @@ const icons = {
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M7.5 7l.7 13h7.6l.7-13M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   restore: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8v5h5M6.2 16a7 7 0 1 0 .5-8.5L5 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  repeat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.5l-2.2-2.2M17 17H7.5l2.2 2.2M17 7l2 2-2 2M7 17l-2-2 2-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   skip: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m9 9 6 6M15 9l-6 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
   soundOff: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 14v-4h4l4-3v10l-4-3H5ZM16 9l4 6M20 9l-4 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 }
@@ -450,9 +451,7 @@ function renderTasks(): void {
 
   host.innerHTML = `
     <div class="task-group">
-      ${sortTasks(pending)
-        .map((task, index) => taskRow(task, isToday ? 'today' : 'history', index))
-        .join('')}
+      ${sortTasks(pending).map((task) => taskRow(task, isToday ? 'today' : 'history')).join('')}
     </div>
     ${
       finished.length
@@ -461,9 +460,7 @@ function renderTasks(): void {
             <span></span><strong>${isToday ? '已完成' : '完成情况'}</strong><em>${finished.length}</em><span></span>
           </div>
           <div class="task-group finished-group">
-            ${sortTasks(finished)
-              .map((task, index) => taskRow(task, isToday ? 'today' : 'history', index))
-              .join('')}
+            ${sortTasks(finished).map((task) => taskRow(task, isToday ? 'today' : 'history')).join('')}
           </div>
         `
         : ''
@@ -471,7 +468,7 @@ function renderTasks(): void {
   `
 }
 
-function taskRow(task: Task, context: 'today' | 'history' | 'overview', index = 0): string {
+function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string {
   const statusClass = task.status === 'active' ? '' : `is-${task.status}`
   const highlightClass = task.id === highlightedTaskId ? 'is-highlighted' : ''
   const statusLabel =
@@ -495,7 +492,7 @@ function taskRow(task: Task, context: 'today' | 'history' | 'overview', index = 
       : ''
 
   return `
-    <article class="task-row ${task.priority === 'high' ? 'high-priority' : ''} ${statusClass} ${highlightClass}" data-task-id="${task.id}" style="--row-index:${Math.min(index, 8)}">
+    <article class="task-row ${task.priority === 'high' ? 'high-priority' : ''} ${statusClass} ${highlightClass}" data-task-id="${task.id}">
       <button
         class="complete-button"
         type="button"
@@ -584,19 +581,19 @@ function renderOverview(): void {
     <div class="overview-section">
       <div class="overview-label"><span>待完成</span><em>${active.length}</em></div>
       <div class="overview-list">
-        ${active.length ? sortTasks(active).map((task, index) => taskRow(task, 'overview', index)).join('') : emptyOverview('没有待完成的任务')}
+        ${active.length ? sortTasks(active).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('没有待完成的任务')}
       </div>
     </div>
     <div class="overview-section">
       <div class="overview-label"><span>已完成</span><em>${completed.length}</em></div>
       <div class="overview-list">
-        ${completed.length ? sortTasks(completed).map((task, index) => taskRow(task, 'overview', index)).join('') : emptyOverview('今天还没有完成记录')}
+        ${completed.length ? sortTasks(completed).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('今天还没有完成记录')}
       </div>
     </div>
     <div class="overview-section">
       <div class="overview-label"><span>今日无需完成</span><em>${skipped.length}</em></div>
       <div class="overview-list">
-        ${skipped.length ? sortTasks(skipped).map((task, index) => taskRow(task, 'overview', index)).join('') : emptyOverview('没有标记为无需完成的任务')}
+        ${skipped.length ? sortTasks(skipped).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('没有标记为无需完成的任务')}
       </div>
     </div>
   `
@@ -682,6 +679,7 @@ function renderSettings(): void {
 function openTaskMenu(taskId: string): void {
   const task = data.tasks.find((item) => item.id === taskId)
   if (!task) return
+  const series = task.seriesId ? data.series.find((item) => item.id === task.seriesId) : undefined
   const body = document.querySelector<HTMLElement>('#taskModalBody')
   if (!body) return
   body.innerHTML = `
@@ -705,10 +703,48 @@ function openTaskMenu(taskId: string): void {
             <button type="button" data-action="restore-task" data-id="${task.id}">${icons.restore}<span>恢复为待完成</span></button>
           `
       }
+      ${
+        series
+          ? `<button class="series-action" type="button" data-action="open-stop-series" data-id="${task.id}">${icons.repeat}<span>停止整个重复系列</span></button>`
+          : ''
+      }
       <button class="danger-action" type="button" data-action="delete-task" data-id="${task.id}">${icons.trash}<span>删除任务</span></button>
     </div>
   `
   showModal('taskModal')
+}
+
+function openStopSeriesMenu(taskId: string): void {
+  const task = data.tasks.find((item) => item.id === taskId)
+  const series = task?.seriesId ? data.series.find((item) => item.id === task.seriesId) : undefined
+  if (!task || !series) return
+  const pendingCount = data.tasks.filter(
+    (item) => item.seriesId === series.id && item.status === 'active'
+  ).length
+  const body = document.querySelector<HTMLElement>('#taskModalBody')
+  if (!body) return
+  body.innerHTML = `
+    <div class="action-head">
+      <div>
+        <div class="eyebrow">REPEATING TASK</div>
+        <h2 id="taskModalTitle">停止整个重复系列？</h2>
+      </div>
+      <button class="icon-button" type="button" data-action="close-modal" data-modal="taskModal" aria-label="关闭">
+        ${icons.close}
+      </button>
+    </div>
+    <div class="series-confirm-card">
+      <strong>${escapeHtml(series.title)}</strong>
+      <span>${escapeHtml(formatWeekdays(series.weekdays))}</span>
+    </div>
+    <p class="series-confirm-copy">
+      将停止此后的每周安排，并移除该系列中 ${pendingCount} 条未完成任务。已完成和“无需完成”的历史记录会保留。
+    </p>
+    <div class="action-list">
+      <button type="button" data-action="close-modal" data-modal="taskModal">取消</button>
+      <button class="danger-action" type="button" data-action="confirm-stop-series" data-id="${task.id}">${icons.repeat}<span>确认停止重复</span></button>
+    </div>
+  `
 }
 
 function handleClick(event: MouseEvent): void {
@@ -769,6 +805,12 @@ function handleClick(event: MouseEvent): void {
     }
     case 'open-task-menu':
       if (id) openTaskMenu(id)
+      break
+    case 'open-stop-series':
+      if (id) openStopSeriesMenu(id)
+      break
+    case 'confirm-stop-series':
+      if (id) stopSeries(id)
       break
     case 'complete-task':
       if (id) finishTask(id, 'completed')
@@ -886,6 +928,8 @@ function addTask(): void {
       createdAt: timestamp
     })
     reconcileWeeklyTasks(data)
+    const firstOccurrence = data.tasks.find((item) => item.id === `${seriesId}--${draft.dueDate}`)
+    if (firstOccurrence) highlightedTaskId = firstOccurrence.id
     persist()
   } else {
     const taskId = newId()
@@ -986,6 +1030,24 @@ function deleteTask(taskId: string): void {
   hideModal('taskModal')
   render()
   if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+}
+
+function stopSeries(taskId: string): void {
+  const task = data.tasks.find((item) => item.id === taskId)
+  const series = task?.seriesId ? data.series.find((item) => item.id === task.seriesId) : undefined
+  if (!task || !series) return
+  const pendingCount = data.tasks.filter(
+    (item) => item.seriesId === series.id && item.status === 'active'
+  ).length
+  data.tasks = data.tasks.filter(
+    (item) => item.seriesId !== series.id || item.status !== 'active'
+  )
+  data.series = data.series.filter((item) => item.id !== series.id)
+  persist()
+  hideModal('taskModal')
+  render()
+  if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+  showToast(`重复系列已停止 · 移除 ${pendingCount} 条未完成清单`)
 }
 
 function setViewDate(date: string): void {
