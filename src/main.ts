@@ -28,11 +28,6 @@ type ComposerDraft = {
   weekdays: Set<number>
 }
 
-type DeletedSnapshot = {
-  task: Task
-  exceptionAdded: boolean
-}
-
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
@@ -63,7 +58,6 @@ if (reconcileWeeklyTasks(data)) saveData(data)
 let viewDate = todayKey()
 let calendarMonth = monthStart(viewDate)
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null
-let lastDeleted: DeletedSnapshot | null = null
 let toastTimer: number | null = null
 let highlightTimer: number | null = null
 let highlightedTaskId: string | null = null
@@ -816,9 +810,6 @@ function handleClick(event: MouseEvent): void {
     case 'install-app':
       void installApp()
       break
-    case 'undo-delete':
-      undoDelete()
-      break
   }
 }
 
@@ -985,35 +976,16 @@ function deleteTask(taskId: string): void {
   const index = data.tasks.findIndex((item) => item.id === taskId)
   if (index === -1) return
   const [task] = data.tasks.splice(index, 1)
-  let exceptionAdded = false
   if (task.seriesId) {
     const series = data.series.find((item) => item.id === task.seriesId)
     if (series && !series.exceptions.includes(task.dueDate)) {
       series.exceptions.push(task.dueDate)
-      exceptionAdded = true
     }
   }
-  lastDeleted = { task, exceptionAdded }
   persist()
   hideModal('taskModal')
   render()
   if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
-  showToast('任务已删除', '撤销')
-}
-
-function undoDelete(): void {
-  if (!lastDeleted) return
-  const { task, exceptionAdded } = lastDeleted
-  if (!data.tasks.some((item) => item.id === task.id)) data.tasks.push(task)
-  if (exceptionAdded && task.seriesId) {
-    const series = data.series.find((item) => item.id === task.seriesId)
-    if (series) series.exceptions = series.exceptions.filter((date) => date !== task.dueDate)
-  }
-  lastDeleted = null
-  persist()
-  render()
-  if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
-  hideToast()
 }
 
 function setViewDate(date: string): void {
@@ -1137,16 +1109,14 @@ function hideModal(id: string): void {
   }, 180)
 }
 
-function showToast(message: string, actionLabel?: string): void {
+function showToast(message: string): void {
   const toast = document.querySelector<HTMLElement>('#toast')
   if (!toast) return
-  toast.innerHTML = `<span>${escapeHtml(message)}</span>${
-    actionLabel ? `<button type="button" data-action="undo-delete">${actionLabel}</button>` : ''
-  }`
+  toast.innerHTML = `<span>${escapeHtml(message)}</span>`
   toast.hidden = false
   requestAnimationFrame(() => toast.classList.add('is-visible'))
   if (toastTimer) window.clearTimeout(toastTimer)
-  toastTimer = window.setTimeout(hideToast, actionLabel ? 5000 : 2400)
+  toastTimer = window.setTimeout(hideToast, 2400)
 }
 
 function hideToast(): void {
@@ -1155,7 +1125,6 @@ function hideToast(): void {
   toast.classList.remove('is-visible')
   window.setTimeout(() => {
     toast.hidden = true
-    if (!toast.querySelector('[data-action="undo-delete"]')) lastDeleted = null
   }, 180)
 }
 
