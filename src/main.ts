@@ -62,7 +62,6 @@ if (reconcileWeeklyTasks(data)) saveData(data)
 
 let viewDate = todayKey()
 let calendarMonth = monthStart(viewDate)
-let advancedOpen = false
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null
 let lastDeleted: DeletedSnapshot | null = null
 let toastTimer: number | null = null
@@ -100,7 +99,6 @@ app.innerHTML = `
     </header>
 
     <main class="content">
-      <div id="composerHost"></div>
       <section class="task-section" aria-labelledby="listTitle">
         <div class="section-label">
           <span id="listTitle">清单</span>
@@ -110,6 +108,31 @@ app.innerHTML = `
       </section>
       <p class="local-note">离线保存 · 仅存于此设备</p>
     </main>
+  </div>
+
+  <button class="floating-add-bar" type="button" data-action="open-quick-add" aria-label="添加清单">
+    <span class="floating-add-icon">${icons.plus}</span>
+    <span class="floating-add-copy">
+      <strong>添加清单</strong>
+      <small>快速记下一件要做的事</small>
+    </span>
+    <span class="floating-add-end">${icons.next}</span>
+  </button>
+
+  <div class="modal-layer quick-add-layer" id="quickAddModal" hidden>
+    <button class="modal-scrim" type="button" data-action="close-modal" data-modal="quickAddModal" aria-label="关闭添加清单"></button>
+    <section class="modal-sheet quick-add-sheet" role="dialog" aria-modal="true" aria-labelledby="quickAddTitle">
+      <div class="sheet-head quick-add-head">
+        <div>
+          <div class="eyebrow">NEW TASK</div>
+          <h2 id="quickAddTitle">添加清单</h2>
+        </div>
+        <button class="icon-button" type="button" data-action="close-modal" data-modal="quickAddModal" aria-label="关闭">
+          ${icons.close}
+        </button>
+      </div>
+      <div id="composerHost"></div>
+    </section>
   </div>
 
   <div class="modal-layer" id="calendarModal" hidden>
@@ -206,8 +229,17 @@ function createDraft(date: string): ComposerDraft {
 function render(): void {
   renderHeader()
   renderTodaySummary()
-  renderComposer()
+  renderFloatingAddButton()
   renderTasks()
+}
+
+function renderFloatingAddButton(): void {
+  const title = document.querySelector<HTMLElement>('.floating-add-copy strong')
+  const subtitle = document.querySelector<HTMLElement>('.floating-add-copy small')
+  if (!title || !subtitle) return
+  const isToday = viewDate === todayKey()
+  title.textContent = isToday ? '添加清单' : `添加到${compactDateLabel(viewDate)}`
+  subtitle.textContent = isToday ? '快速记下一件要做的事' : '为选中的日期补充清单'
 }
 
 function renderHeader(): void {
@@ -307,8 +339,13 @@ function renderComposer(): void {
   const placeholder = isToday ? '今天要做什么？' : `为${shortDate(viewDate)}记一件事`
 
   host.innerHTML = `
-    <form class="composer ${advancedOpen ? 'is-expanded' : ''}" id="taskForm">
-      <div class="quick-entry">
+    <form class="composer task-composer" id="taskForm">
+      <div class="composer-caption">
+        <span>把待办写下来</span>
+        <em id="draftMeta"></em>
+      </div>
+      <label class="title-field">
+        <span class="sr-only">清单内容</span>
         <input
           id="taskTitle"
           name="title"
@@ -320,53 +357,46 @@ function renderComposer(): void {
           maxlength="160"
           aria-label="任务内容"
         />
-        <button class="add-button" type="submit" aria-label="添加任务">
-          ${icons.plus}<span>添加</span>
+      </label>
+      <label class="field note-field">
+        <span>备注 <em>选填</em></span>
+        <textarea id="taskNote" name="note" rows="2" maxlength="1000" placeholder="补充一点信息">${escapeHtml(draft.note)}</textarea>
+      </label>
+      <div class="field-grid">
+        <button class="choice-button" type="button" data-action="toggle-priority" id="priorityChoice" aria-pressed="${draft.priority === 'high'}">
+          <span class="choice-swatch high"></span>
+          <span>高优先级</span>
         </button>
-      </div>
-      <div class="composer-tools">
-        <button class="detail-toggle" type="button" data-action="toggle-details">
-          <span class="detail-dot"></span>
-          <span>${advancedOpen ? '收起选项' : '详情'}</span>
-        </button>
-        <div class="draft-meta" id="draftMeta"></div>
-      </div>
-      <div class="composer-advanced" id="composerAdvanced">
-        <label class="field note-field">
-          <span>备注 <em>选填</em></span>
-          <textarea id="taskNote" name="note" rows="2" maxlength="1000" placeholder="补充一点信息">${escapeHtml(draft.note)}</textarea>
+        <label class="choice-button date-choice">
+          <span>日期</span>
+          <strong id="taskDateDisplay">${escapeHtml(compactDateLabel(draft.dueDate))}</strong>
+          <input id="taskDate" name="date" type="date" value="${draft.dueDate}" />
         </label>
-        <div class="field-grid">
-          <button class="choice-button" type="button" data-action="toggle-priority" id="priorityChoice" aria-pressed="${draft.priority === 'high'}">
-            <span class="choice-swatch high"></span>
-            <span>高优先级</span>
-          </button>
-          <label class="choice-button date-choice">
-            <span>日期</span>
-            <strong id="taskDateDisplay">${escapeHtml(compactDateLabel(draft.dueDate))}</strong>
-            <input id="taskDate" name="date" type="date" value="${draft.dueDate}" />
-          </label>
-        </div>
-        <div class="repeat-row">
-          <div>
-            <strong>每周重复</strong>
-            <span>按所选星期，每周自动列出</span>
-          </div>
-          <label class="switch">
-            <input id="repeatToggle" type="checkbox" ${draft.repeat ? 'checked' : ''} />
-            <span></span>
-          </label>
-        </div>
-        <div class="weekday-picker" id="weekdayPicker">
-          ${WEEKDAY_START_MONDAY.map(
-            (day) => `
-              <button type="button" class="weekday-button ${draft.weekdays.has(day) ? 'is-selected' : ''}" data-action="toggle-weekday" data-weekday="${day}" aria-pressed="${draft.weekdays.has(day)}">
-                ${WEEKDAY_SHORT[day]}
-              </button>
-            `
-          ).join('')}
-        </div>
       </div>
+      <div class="repeat-row">
+        <div>
+          <strong>每周重复</strong>
+          <span>按所选星期，每周自动列出</span>
+        </div>
+        <label class="switch">
+          <input id="repeatToggle" type="checkbox" ${draft.repeat ? 'checked' : ''} />
+          <span></span>
+        </label>
+      </div>
+      <div class="weekday-picker" id="weekdayPicker">
+        ${WEEKDAY_START_MONDAY.map(
+          (day) => `
+            <button type="button" class="weekday-button ${draft.weekdays.has(day) ? 'is-selected' : ''}" data-action="toggle-weekday" data-weekday="${day}" aria-pressed="${draft.weekdays.has(day)}">
+              ${WEEKDAY_SHORT[day]}
+            </button>
+          `
+        ).join('')}
+      </div>
+      <button class="submit-add-bar" id="submitAddButton" type="submit">
+        <span class="submit-add-icon">${icons.plus}</span>
+        <span class="submit-add-label">添加清单</span>
+        <span class="submit-add-hint">Enter</span>
+      </button>
     </form>
   `
   updateDraftUI()
@@ -374,18 +404,16 @@ function renderComposer(): void {
 
 function updateDraftUI(): void {
   const meta = document.querySelector<HTMLElement>('#draftMeta')
-  const advanced = document.querySelector<HTMLElement>('#composerAdvanced')
   const picker = document.querySelector<HTMLElement>('#weekdayPicker')
   const repeat = document.querySelector<HTMLInputElement>('#repeatToggle')
   const priority = document.querySelector<HTMLElement>('#priorityChoice')
   const dateDisplay = document.querySelector<HTMLElement>('#taskDateDisplay')
-  if (!meta || !advanced || !picker || !repeat || !priority) return
+  if (!meta || !picker || !repeat || !priority) return
 
   const dateLabel = draft.dueDate === todayKey() ? '今天' : shortDate(draft.dueDate)
   const priorityLabel = draft.priority === 'high' ? '高优先级' : '普通'
   meta.textContent = `${priorityLabel} · ${dateLabel}${draft.repeat ? ' · ' + formatWeekdays([...draft.weekdays]) : ''}`
   if (dateDisplay) dateDisplay.textContent = compactDateLabel(draft.dueDate)
-  advanced.hidden = !advancedOpen
   picker.hidden = !draft.repeat
   repeat.checked = draft.repeat
   priority.classList.toggle('is-selected', draft.priority === 'high')
@@ -700,6 +728,9 @@ function handleClick(event: MouseEvent): void {
     case 'go-today':
       setViewDate(todayKey())
       break
+    case 'open-quick-add':
+      openQuickAdd()
+      break
     case 'open-calendar':
       calendarMonth = monthStart(viewDate)
       renderCalendar()
@@ -726,14 +757,6 @@ function handleClick(event: MouseEvent): void {
     case 'open-settings':
       renderSettings()
       showModal('settingsModal')
-      break
-    case 'toggle-details':
-      advancedOpen = !advancedOpen
-      document.querySelector('.composer')?.classList.toggle('is-expanded', advancedOpen)
-      const toggleLabel = actionElement.querySelector('span:last-child')
-      if (toggleLabel) toggleLabel.textContent = advancedOpen ? '收起选项' : '详情'
-      updateDraftUI()
-      if (advancedOpen) window.setTimeout(() => document.querySelector<HTMLTextAreaElement>('#taskNote')?.focus(), 100)
       break
     case 'toggle-priority':
       draft.priority = draft.priority === 'high' ? 'normal' : 'high'
@@ -890,16 +913,28 @@ function addTask(): void {
   }
 
   const savedDate = draft.dueDate
-  advancedOpen = false
   draft = createDraft(viewDate)
+  const submitButton = document.querySelector<HTMLElement>('#submitAddButton')
+  submitButton?.classList.add('is-success')
+  const submitLabel = submitButton?.querySelector<HTMLElement>('.submit-add-label')
+  if (submitLabel) submitLabel.textContent = '已添加'
   render()
+  hideModal('quickAddModal')
   if (highlightedTaskId) scheduleHighlightClear(highlightedTaskId)
-  titleInput?.focus()
   if (savedDate !== viewDate) {
     showToast(`${savedRepeat ? '重复清单' : '清单'}已记在 ${shortDate(savedDate)}`)
   } else {
     showToast(savedRepeat ? '已加入每周清单' : '已加入今天')
   }
+}
+
+function openQuickAdd(): void {
+  draft = createDraft(viewDate)
+  renderComposer()
+  showModal('quickAddModal')
+  window.setTimeout(() => {
+    document.querySelector<HTMLInputElement>('#taskTitle')?.focus({ preventScroll: true })
+  }, 190)
 }
 
 function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void {
