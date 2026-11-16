@@ -337,12 +337,13 @@ function renderComposer(): void {
           <textarea id="taskNote" name="note" rows="2" maxlength="1000" placeholder="补充一点信息">${escapeHtml(draft.note)}</textarea>
         </label>
         <div class="field-grid">
-          <button class="choice-button" type="button" data-action="toggle-priority" id="priorityChoice">
+          <button class="choice-button" type="button" data-action="toggle-priority" id="priorityChoice" aria-pressed="${draft.priority === 'high'}">
             <span class="choice-swatch high"></span>
             <span>高优先级</span>
           </button>
           <label class="choice-button date-choice">
             <span>日期</span>
+            <strong id="taskDateDisplay">${escapeHtml(compactDateLabel(draft.dueDate))}</strong>
             <input id="taskDate" name="date" type="date" value="${draft.dueDate}" />
           </label>
         </div>
@@ -377,15 +378,18 @@ function updateDraftUI(): void {
   const picker = document.querySelector<HTMLElement>('#weekdayPicker')
   const repeat = document.querySelector<HTMLInputElement>('#repeatToggle')
   const priority = document.querySelector<HTMLElement>('#priorityChoice')
+  const dateDisplay = document.querySelector<HTMLElement>('#taskDateDisplay')
   if (!meta || !advanced || !picker || !repeat || !priority) return
 
   const dateLabel = draft.dueDate === todayKey() ? '今天' : shortDate(draft.dueDate)
   const priorityLabel = draft.priority === 'high' ? '高优先级' : '普通'
   meta.textContent = `${priorityLabel} · ${dateLabel}${draft.repeat ? ' · ' + formatWeekdays([...draft.weekdays]) : ''}`
+  if (dateDisplay) dateDisplay.textContent = compactDateLabel(draft.dueDate)
   advanced.hidden = !advancedOpen
   picker.hidden = !draft.repeat
   repeat.checked = draft.repeat
   priority.classList.toggle('is-selected', draft.priority === 'high')
+  priority.setAttribute('aria-pressed', String(draft.priority === 'high'))
 
   document.querySelectorAll<HTMLElement>('.weekday-button').forEach((button) => {
     const day = Number(button.dataset.weekday)
@@ -1137,6 +1141,14 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;')
+}
+
+function compactDateLabel(date: string): string {
+  const dateValue = new Date(`${date}T12:00:00`)
+  const sameYear = dateValue.getFullYear() === new Date().getFullYear()
+  return new Intl.DateTimeFormat('zh-CN', sameYear ? { month: 'numeric', day: 'numeric' } : { year: 'numeric', month: 'numeric', day: 'numeric' }).format(
+    dateValue
+  )
 }
 
 function cssEscape(value: string): string {
