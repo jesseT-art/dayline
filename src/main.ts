@@ -2,6 +2,7 @@ import './style.css'
 import {
   WEEKDAY_SHORT,
   WEEKDAY_START_MONDAY,
+  addDaysToKey,
   formatWeekdays,
   friendlyHeader,
   isMonthDay,
@@ -223,26 +224,75 @@ function renderTodaySummary(): void {
   if (!host) return
 
   if (viewDate !== todayKey()) {
-    host.innerHTML = `<div class="history-marker">${viewDate > todayKey() ? '未来清单' : '历史清单'}</div>`
+    host.innerHTML = `
+      <div class="history-marker">
+        <i class="${viewDate > todayKey() ? 'future' : 'past'}"></i>
+        <span>${viewDate > todayKey() ? '未来清单' : '历史清单'}</span>
+        <em>${tasksDueOn(viewDate).length} 件</em>
+      </div>
+    `
     return
   }
 
   const active = activeForToday()
   const completed = finishedForToday('completed')
   const skipped = finishedForToday('skipped')
+  const total = active.length + completed.length + skipped.length
+  const completedPercent = total ? Math.round((completed.length / total) * 100) : 0
+  const activePercent = total ? (active.length / total) * 100 : 0
+  const completedStop = completedPercent
+  const activeStop = completedPercent + activePercent
+  const ring = total
+    ? `conic-gradient(var(--success) 0 ${completedStop}%, var(--accent) ${completedStop}% ${activeStop}%, var(--violet) ${activeStop}% 100%)`
+    : 'var(--surface-muted)'
+  const week = sevenDayOverview()
+  const weekTotal = week.reduce((sum, day) => sum + day.total, 0)
+  const weekCompleted = week.reduce((sum, day) => sum + day.completed, 0)
+
   host.innerHTML = `
-    <div class="summary-strip">
-      <div class="summary-count">
-        <strong>${active.length}</strong>
-        <span>件待完成</span>
-        <i></i>
-        <span>完成 ${completed.length}</span>
-        <span>无需 ${skipped.length}</span>
+    <section class="today-dashboard" aria-label="今日信息概览">
+      <div class="dashboard-panels">
+        <div class="progress-panel">
+          <div class="progress-ring" style="--ring:${ring}">
+            <div><strong>${completedPercent}%</strong><span>完成</span></div>
+          </div>
+          <div class="progress-copy">
+            <span class="mini-eyebrow">TODAY</span>
+            <h2>今日进度</h2>
+            <p>${completed.length} / ${total} 件已完成</p>
+          </div>
+        </div>
+        <div class="week-panel">
+          <div class="week-head">
+            <div><span class="mini-eyebrow">7 DAYS</span><h2>近 7 天</h2></div>
+            <em>完成 ${weekCompleted}<span> / ${weekTotal}</span></em>
+          </div>
+          <div class="week-chart">
+            ${week
+              .map(
+                (day, index) => `
+                  <div class="week-day ${index === week.length - 1 ? 'is-today' : ''}" title="${shortDate(day.date)}：${day.completed} / ${day.total}">
+                    <div class="week-track"><i style="height:${day.height}%;--bar:${day.color}"></i></div>
+                    <span>${index === week.length - 1 ? '今' : WEEKDAY_SHORT[weekdayOfKey(day.date)]}</span>
+                  </div>
+                `
+              )
+              .join('')}
+          </div>
+          <p class="chart-caption"><i></i>高度为任务量 · 颜色为完成度</p>
+        </div>
       </div>
-      <button class="text-button" type="button" data-action="open-overview">
-        总览 ${icons.next}
-      </button>
-    </div>
+      <div class="dashboard-footer">
+        <div class="metric-list">
+          <span class="metric pending"><i></i>待完成 <strong>${active.length}</strong></span>
+          <span class="metric done"><i></i>已完成 <strong>${completed.length}</strong></span>
+          <span class="metric skipped"><i></i>无需 <strong>${skipped.length}</strong></span>
+        </div>
+        <button class="overview-link" type="button" data-action="open-overview">
+          清单总览 ${icons.next}
+        </button>
+      </div>
+    </section>
   `
 }
 
@@ -347,11 +397,17 @@ function renderTasks(): void {
   if (!host || !hint) return
 
   const isToday = viewDate === todayKey()
-  const tasks = isToday ? activeForToday() : tasksDueOn(viewDate)
-  const visibleCount = tasks.filter((task) => task.status === 'active').length
-  hint.textContent = isToday && visibleCount > 0 ? `${visibleCount} 件` : ''
+  const dayTasks = isToday ? activeForToday() : tasksDueOn(viewDate)
+  const pending = dayTasks.filter((task) => task.status === 'active')
+  const finished = isToday
+    ? finishedForToday('completed')
+    : dayTasks.filter((task) => task.status !== 'active')
+  const visibleCount = pending.length
+  hint.textContent = isToday
+    ? `${visibleCount} 待办${finished.length ? ` · ${finished.length} 完成` : ''}`
+    : `${dayTasks.length} 件`
 
-  if (tasks.length === 0) {
+  if (pending.length === 0 && finished.length === 0) {
     host.innerHTML = `
       <div class="empty-state">
         <span class="empty-line"></span>
@@ -362,7 +418,23 @@ function renderTasks(): void {
     return
   }
 
-  host.innerHTML = sortTasks(tasks).map((task) => taskRow(task, isToday ? 'today' : 'history')).join('')
+  host.innerHTML = `
+    <div class="task-group">
+      ${sortTasks(pending).map((task) => taskRow(task, isToday ? 'today' : 'history')).join('')}
+    </div>
+    ${
+      finished.length
+        ? `
+          <div class="completed-divider">
+            <span></span><strong>${isToday ? '已完成' : '完成情况'}</strong><em>${finished.length}</em><span></span>
+          </div>
+          <div class="task-group finished-group">
+            ${sortTasks(finished).map((task) => taskRow(task, isToday ? 'today' : 'history')).join('')}
+          </div>
+        `
+        : ''
+    }
+  `
 }
 
 function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string {
@@ -373,7 +445,15 @@ function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string 
   const seriesLabel = task.seriesId ? '每周重复' : ''
   const sourceChip = source ? `<span class="meta-chip overdue">${escapeHtml(source)}</span>` : ''
   const repeatChip = seriesLabel ? `<span class="meta-chip">${seriesLabel}</span>` : ''
-  const statusChip = statusLabel ? `<span class="status-chip ${statusClass}">${statusLabel}</span>` : ''
+  const statusTime =
+    task.status !== 'active' && task.statusAt
+      ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(
+          new Date(task.statusAt)
+        )
+      : ''
+  const statusChip = statusLabel
+    ? `<span class="status-chip ${statusClass}">${statusLabel}${statusTime ? ` · ${statusTime}` : ''}</span>`
+    : ''
   const restoreButton =
     context === 'overview' && task.status !== 'active'
       ? `<button class="restore-button" type="button" data-action="restore-task" data-id="${task.id}">${icons.restore}<span>恢复</span></button>`
@@ -805,6 +885,17 @@ function addTask(): void {
 function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void {
   const task = data.tasks.find((item) => item.id === taskId)
   if (!task) return
+  if (status === 'completed') {
+    task.status = 'completed'
+    task.statusAt = new Date().toISOString()
+    persist()
+    hideModal('taskModal')
+    render()
+    navigator.vibrate?.(8)
+    showToast('已完成 · 已移至清单底部')
+    return
+  }
+
   const row = document.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
   row?.classList.add('is-leaving')
 
@@ -815,7 +906,7 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     hideModal('taskModal')
     render()
     navigator.vibrate?.(8)
-    showToast(status === 'completed' ? '已完成 · 可从今日总览恢复' : '已标记为今日无需完成')
+    showToast('已标记为今日无需完成')
   }, 160)
 }
 
@@ -893,13 +984,49 @@ function finishedForToday(status: 'completed' | 'skipped'): Task[] {
 
 function sortTasks(tasks: Task[]): Task[] {
   return [...tasks].sort((a, b) => {
-    const priorityDifference = (a.priority === 'high' ? 0 : 1) - (b.priority === 'high' ? 0 : 1)
-    if (priorityDifference !== 0) return priorityDifference
     if (a.status !== b.status) {
       const order: Record<TaskStatus, number> = { active: 0, completed: 1, skipped: 2 }
       return order[a.status] - order[b.status]
     }
+    const priorityDifference = (a.priority === 'high' ? 0 : 1) - (b.priority === 'high' ? 0 : 1)
+    if (priorityDifference !== 0) return priorityDifference
     return b.createdAt.localeCompare(a.createdAt)
+  })
+}
+
+function sevenDayOverview(): Array<{
+  date: string
+  total: number
+  completed: number
+  height: number
+  color: string
+}> {
+  const today = todayKey()
+  const days = Array.from({ length: 7 }, (_, index) => addDaysToKey(today, index - 6))
+  const raw = days.map((date) => {
+    const tasks = tasksDueOn(date)
+    return {
+      date,
+      total: tasks.length,
+      completed: tasks.filter((task) => task.status === 'completed').length
+    }
+  })
+  const maxTotal = Math.max(1, ...raw.map((day) => day.total))
+
+  return raw.map((day) => {
+    const ratio = day.total ? day.completed / day.total : 0
+    const height = day.total ? Math.max(22, Math.round((day.total / maxTotal) * 100)) : 6
+    const color =
+      day.total === 0
+        ? 'var(--line-strong)'
+        : ratio === 1
+          ? 'var(--success)'
+          : ratio >= 0.6
+            ? 'var(--teal)'
+            : ratio > 0
+              ? 'var(--amber)'
+              : 'var(--coral)'
+    return { ...day, height, color }
   })
 }
 
@@ -918,7 +1045,7 @@ function applyTheme(): void {
   document.documentElement.dataset.accent = data.preferences.accent
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute(
     'content',
-    theme === 'dark' ? '#151513' : '#f6f4ee'
+    theme === 'dark' ? '#0e1319' : '#eef2f6'
   )
 }
 
