@@ -53,6 +53,12 @@ const icons = {
 const app = document.querySelector<HTMLDivElement>('#app')
 if (!app) throw new Error('App root was not found.')
 
+document.documentElement.dataset.platform = /Android/i.test(navigator.userAgent)
+  ? 'android'
+  : /iPhone|iPad|iPod/i.test(navigator.userAgent)
+    ? 'ios'
+    : 'desktop'
+
 const data: AppData = loadData()
 if (reconcileWeeklyTasks(data)) saveData(data)
 

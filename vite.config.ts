@@ -13,10 +13,13 @@ export default defineConfig({
         short_name: 'Dayline',
         description: '把今天，写清楚。',
         lang: 'zh-CN',
+        id: './',
         start_url: './',
         scope: './',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
         orientation: 'portrait',
+        categories: ['productivity', 'utilities'],
         background_color: '#eef2f6',
         theme_color: '#eef2f6',
         icons: [
