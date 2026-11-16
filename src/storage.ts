@@ -1,5 +1,5 @@
 import { addDaysToKey, todayKey, weekdayOfKey } from './date'
-import type { AccentName, AppData, Priority, Task, ThemeMode, WeeklySeries } from './types'
+import type { AccentName, AppData, DailySummary, Priority, Task, ThemeMode, WeeklySeries } from './types'
 
 const STORE_KEY = 'dayline.app.v1'
 const FUTURE_HORIZON_DAYS = 730
@@ -13,6 +13,7 @@ export function createDefaultData(): AppData {
     version: 1,
     tasks: [],
     series: [],
+    summaries: [],
     preferences: {
       theme: 'system',
       accent: 'indigo'
@@ -58,11 +59,27 @@ export function loadData(): AppData {
           }))
       : []
 
+    const summaries = Array.isArray(parsed.summaries)
+      ? parsed.summaries
+          .filter(
+            (summary): summary is DailySummary =>
+              Boolean(summary?.date && summary?.content) &&
+              (summary.kind === 'work' || summary.kind === 'study')
+          )
+          .map((summary) => ({
+            date: summary.date,
+            kind: summary.kind,
+            content: summary.content,
+            updatedAt: summary.updatedAt || new Date().toISOString()
+          }))
+      : []
+
     const preferences = parsed.preferences
     return {
       version: 1,
       tasks,
       series,
+      summaries,
       preferences: {
         theme: preferences && themes.includes(preferences.theme) ? preferences.theme : defaults.preferences.theme,
         accent:

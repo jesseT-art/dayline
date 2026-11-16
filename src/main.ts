@@ -17,7 +17,7 @@ import {
   weekdayOfKey
 } from './date'
 import { loadData, newId, reconcileWeeklyTasks, saveData } from './storage'
-import type { AccentName, AppData, Task, TaskStatus, ThemeMode } from './types'
+import type { AccentName, AppData, SummaryKind, Task, TaskStatus, ThemeMode } from './types'
 
 type ComposerDraft = {
   title: string
@@ -43,6 +43,7 @@ const icons = {
   check: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 12.5 3.5 3.5 7.5-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="18" cy="12" r="1.5" fill="currentColor"/></svg>`,
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  summary: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h9l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M15 3.8V8h4M8.5 12h7M8.5 15.5h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M7.5 7l.7 13h7.6l.7-13M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   restore: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8v5h5M6.2 16a7 7 0 1 0 .5-8.5L5 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   repeat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.5l-2.2-2.2M17 17H7.5l2.2 2.2M17 7l2 2-2 2M7 17l-2-2 2-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -64,6 +65,7 @@ if (reconcileWeeklyTasks(data)) saveData(data)
 
 let viewDate = todayKey()
 let calendarMonth = monthStart(viewDate)
+let summaryDate = todayKey()
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null
 let toastTimer: number | null = null
 let highlightTimer: number | null = null
@@ -92,14 +94,20 @@ app.innerHTML = `
           <div class="eyebrow" id="dateEyebrow"></div>
           <h1 id="dateTitle"></h1>
         </div>
-        <button class="back-today" type="button" data-action="go-today" id="backToday" hidden>
-          ${icons.back}<span>今天</span>
-        </button>
+        <div class="date-actions">
+          <button class="summary-action" type="button" data-action="open-summary" id="summaryAction">
+            ${icons.summary}<span>总结</span>
+          </button>
+          <button class="back-today" type="button" data-action="go-today" id="backToday" hidden>
+            ${icons.back}<span>今天</span>
+          </button>
+        </div>
       </div>
       <div id="todaySummary"></div>
     </header>
 
     <main class="content">
+      <div id="summaryHost"></div>
       <section class="task-section" aria-labelledby="listTitle">
         <div class="section-label">
           <span id="listTitle">清单</span>
@@ -133,6 +141,22 @@ app.innerHTML = `
         </button>
       </div>
       <div id="composerHost"></div>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="summaryModal" hidden>
+    <button class="modal-scrim" type="button" data-action="close-modal" data-modal="summaryModal" aria-label="关闭每日总结"></button>
+    <section class="modal-sheet summary-sheet" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
+      <div class="sheet-head">
+        <div>
+          <div class="eyebrow">DAILY REVIEW</div>
+          <h2 id="summaryTitle">每日总结</h2>
+        </div>
+        <button class="icon-button" type="button" data-action="close-modal" data-modal="summaryModal" aria-label="关闭">
+          ${icons.close}
+        </button>
+      </div>
+      <div id="summaryBody"></div>
     </section>
   </div>
 
@@ -230,6 +254,7 @@ function createDraft(date: string): ComposerDraft {
 function render(): void {
   renderHeader()
   renderTodaySummary()
+  renderSummarySection()
   renderFloatingAddButton()
   renderTasks()
 }
@@ -247,13 +272,132 @@ function renderHeader(): void {
   const title = document.querySelector<HTMLElement>('#dateTitle')
   const eyebrow = document.querySelector<HTMLElement>('#dateEyebrow')
   const backToday = document.querySelector<HTMLElement>('#backToday')
+  const summaryAction = document.querySelector<HTMLElement>('#summaryAction')
   const isToday = viewDate === todayKey()
-  if (!title || !eyebrow || !backToday) return
+  if (!title || !eyebrow || !backToday || !summaryAction) return
 
   title.textContent = isToday ? '今天' : shortDate(viewDate)
   eyebrow.textContent = friendlyHeader(viewDate).replace('今天 · ', '')
   backToday.hidden = isToday
   document.body.dataset.view = isToday ? 'today' : 'history'
+}
+
+function renderSummarySection(): void {
+  const host = document.querySelector<HTMLElement>('#summaryHost')
+  if (!host) return
+  const summaries = summariesFor(viewDate)
+  const isToday = viewDate === todayKey()
+
+  if (summaries.length === 0) {
+    host.innerHTML = isToday
+      ? ''
+      : `
+        <section class="daily-summary-empty">
+          <div><strong>这一天还没有总结</strong><span>记录工作或学习上的收获</span></div>
+          <button type="button" data-action="open-summary">写总结</button>
+        </section>
+      `
+    return
+  }
+
+  host.innerHTML = `
+    <section class="daily-summary-panel" aria-labelledby="dailySummaryTitle">
+      <div class="daily-summary-head">
+        <div>
+          <span class="mini-eyebrow">DAILY REVIEW</span>
+          <h2 id="dailySummaryTitle">${isToday ? '今日总结' : shortDate(viewDate) + '总结'}</h2>
+        </div>
+        <button class="summary-edit-button" type="button" data-action="open-summary">
+          ${icons.summary}<span>编辑</span>
+        </button>
+      </div>
+      <div class="summary-card-list">
+        ${summaries
+          .map(
+            (summary) => `
+              <article class="summary-card ${summary.kind}">
+                <div class="summary-card-head">
+                  <span>${summary.kind === 'work' ? '工作总结' : '学习总结'}</span>
+                  <time>${new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(summary.updatedAt))}</time>
+                </div>
+                <p>${escapeHtml(summary.content).replaceAll('\n', '<br>')}</p>
+              </article>
+            `
+          )
+          .join('')}
+      </div>
+    </section>
+  `
+}
+
+function summariesFor(date: string) {
+  return data.summaries
+    .filter((summary) => summary.date === date)
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'work' ? -1 : 1))
+}
+
+function summaryContent(date: string, kind: SummaryKind): string {
+  return data.summaries.find((summary) => summary.date === date && summary.kind === kind)?.content || ''
+}
+
+function openSummaryEditor(): void {
+  summaryDate = viewDate
+  renderSummaryEditor()
+  showModal('summaryModal')
+  document.querySelector<HTMLTextAreaElement>('#summaryWork')?.focus()
+}
+
+function renderSummaryEditor(): void {
+  const body = document.querySelector<HTMLElement>('#summaryBody')
+  if (!body) return
+  body.innerHTML = `
+    <form class="summary-form" id="summaryForm">
+      <div class="summary-date-label">
+        <span>${summaryDate === todayKey() ? '今天' : shortDate(summaryDate)}</span>
+        <em>工作总结或学习总结，至少填写一项</em>
+      </div>
+      <label class="summary-input work">
+        <span>工作总结</span>
+        <textarea id="summaryWork" rows="4" maxlength="3000" placeholder="今天完成了什么，有什么进展或问题？">${escapeHtml(summaryContent(summaryDate, 'work'))}</textarea>
+      </label>
+      <label class="summary-input study">
+        <span>学习总结</span>
+        <textarea id="summaryStudy" rows="4" maxlength="3000" placeholder="今天学了什么，有哪些收获或想法？">${escapeHtml(summaryContent(summaryDate, 'study'))}</textarea>
+      </label>
+      <button class="summary-save-button" type="submit">
+        ${icons.summary}<span>保存总结</span>
+      </button>
+    </form>
+  `
+}
+
+function saveSummary(): void {
+  const work = document.querySelector<HTMLTextAreaElement>('#summaryWork')?.value.trim() || ''
+  const study = document.querySelector<HTMLTextAreaElement>('#summaryStudy')?.value.trim() || ''
+  const now = new Date().toISOString()
+  const upsert = (kind: SummaryKind, content: string): void => {
+    const existing = data.summaries.find(
+      (summary) => summary.date === summaryDate && summary.kind === kind
+    )
+    data.summaries = data.summaries.filter(
+      (summary) => !(summary.date === summaryDate && summary.kind === kind)
+    )
+    if (content) {
+      data.summaries.push({
+        date: summaryDate,
+        kind,
+        content,
+        updatedAt: existing?.content === content ? existing.updatedAt : now
+      })
+    }
+  }
+  upsert('work', work)
+  upsert('study', study)
+  persist()
+  hideModal('summaryModal')
+  renderHeader()
+  renderSummarySection()
+  showToast(work || study ? '总结已保存' : '总结已清空')
 }
 
 function renderTodaySummary(): void {
@@ -767,6 +911,9 @@ function handleClick(event: MouseEvent): void {
     case 'open-quick-add':
       openQuickAdd()
       break
+    case 'open-summary':
+      openSummaryEditor()
+      break
     case 'open-calendar':
       calendarMonth = monthStart(viewDate)
       renderCalendar()
@@ -888,9 +1035,14 @@ function handleChange(event: Event): void {
 }
 
 function handleSubmit(event: SubmitEvent): void {
-  if (!(event.target instanceof HTMLFormElement) || event.target.id !== 'taskForm') return
-  event.preventDefault()
-  addTask()
+  if (!(event.target instanceof HTMLFormElement)) return
+  if (event.target.id === 'taskForm') {
+    event.preventDefault()
+    addTask()
+  } else if (event.target.id === 'summaryForm') {
+    event.preventDefault()
+    saveSummary()
+  }
 }
 
 function handleKeydown(event: KeyboardEvent): void {
