@@ -280,7 +280,7 @@ function renderTodaySummary(): void {
   const completedStop = completedPercent
   const activeStop = completedPercent + activePercent
   const ring = total
-    ? `conic-gradient(var(--success) 0 ${completedStop}%, var(--accent) ${completedStop}% ${activeStop}%, var(--violet) ${activeStop}% 100%)`
+    ? `conic-gradient(var(--accent) 0 ${completedStop}%, var(--accent-2) ${completedStop}% ${activeStop}%, var(--accent-3) ${activeStop}% 100%)`
     : 'var(--surface-muted)'
   const week = sevenDayOverview()
   const weekTotal = week.reduce((sum, day) => sum + day.total, 0)
@@ -1119,12 +1119,12 @@ function sevenDayOverview(): Array<{
       day.total === 0
         ? 'var(--line-strong)'
         : ratio === 1
-          ? 'var(--success)'
+          ? 'var(--accent)'
           : ratio >= 0.6
-            ? 'var(--teal)'
+            ? 'var(--accent-2)'
             : ratio > 0
-              ? 'var(--amber)'
-              : 'var(--coral)'
+              ? 'var(--accent-3)'
+              : 'color-mix(in srgb, var(--accent-3) 46%, var(--glass-line))'
     return { ...day, height, color }
   })
 }
