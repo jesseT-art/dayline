@@ -1,4 +1,5 @@
 import './style.css'
+import './completion.css'
 import {
   WEEKDAY_SHORT,
   WEEKDAY_START_MONDAY,
@@ -70,6 +71,7 @@ let deferredInstallPrompt: BeforeInstallPromptEvent | null = null
 let toastTimer: number | null = null
 let highlightTimer: number | null = null
 let highlightedTaskId: string | null = null
+const completingTasks = new Set<string>()
 const modalHistory: string[] = []
 let suppressedPopstates = 0
 let draft: ComposerDraft = createDraft(viewDate)
@@ -653,7 +655,7 @@ function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string 
         data-id="${task.id}"
         aria-label="${task.status === 'active' ? '标记完成' : statusLabel}"
       >
-        ${task.status === 'completed' ? icons.check : task.status === 'skipped' ? icons.skip : ''}
+        ${task.status === 'skipped' ? icons.skip : icons.check}
       </button>
       <div class="task-copy">
         <div class="task-title-row">
@@ -1135,21 +1137,36 @@ function openQuickAdd(): void {
 
 function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void {
   const task = data.tasks.find((item) => item.id === taskId)
-  if (!task) return
+  if (!task || completingTasks.has(taskId)) return
+  completingTasks.add(taskId)
+  triggerHaptic(status === 'completed' ? [12, 22, 16] : 16)
+
   if (status === 'completed') {
+    const overviewOpen = !document.querySelector<HTMLElement>('#overviewModal')?.hidden
+    const scope = overviewOpen ? document.querySelector<HTMLElement>('#overviewModal') : document
+    const row = scope?.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
+    row?.classList.add('is-completing')
+    row?.setAttribute('aria-busy', 'true')
+
     task.status = 'completed'
     task.statusAt = new Date().toISOString()
     persist()
     hideModal('taskModal')
-    highlightedTaskId = task.id
-    render()
-    scheduleHighlightClear(task.id)
-    navigator.vibrate?.(8)
-    showToast('已完成 · 已移至清单底部')
+    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420
+    window.setTimeout(() => {
+      highlightedTaskId = task.id
+      render()
+      scheduleHighlightClear(task.id)
+      if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+      completingTasks.delete(taskId)
+      showToast('已完成 · 已移至清单底部')
+    }, delay)
     return
   }
 
-  const row = document.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
+  const overviewOpen = !document.querySelector<HTMLElement>('#overviewModal')?.hidden
+  const scope = overviewOpen ? document.querySelector<HTMLElement>('#overviewModal') : document
+  const row = scope?.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
   row?.classList.add('is-leaving')
 
   window.setTimeout(() => {
@@ -1158,9 +1175,18 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     persist()
     hideModal('taskModal')
     render()
-    navigator.vibrate?.(8)
+    if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+    completingTasks.delete(taskId)
     showToast('已标记为今日无需完成')
   }, 160)
+}
+
+function triggerHaptic(pattern: number | number[]): void {
+  try {
+    navigator.vibrate?.(pattern)
+  } catch {
+    // Haptics are unavailable in some browsers, especially iOS Safari.
+  }
 }
 
 function restoreTask(taskId: string): void {
