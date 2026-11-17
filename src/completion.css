@@ -21,6 +21,7 @@
 }
 
 .task-row.is-completing {
+  position: relative;
   pointer-events: none;
   animation: task-complete-out 420ms cubic-bezier(0.2, 0.78, 0.22, 1) both;
 }
@@ -30,10 +31,22 @@
   inset: 0;
   border-radius: inherit;
   background:
-    radial-gradient(circle at 10% 50%, color-mix(in srgb, var(--success) 24%, transparent), transparent 34%);
+    linear-gradient(
+      92deg,
+      color-mix(in srgb, var(--accent-2) 35%, white),
+      color-mix(in srgb, var(--accent) 30%, white) 54%,
+      color-mix(in srgb, var(--accent-3) 38%, white)
+    );
   content: "";
   pointer-events: none;
-  animation: completion-flash 420ms ease-out both;
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: completion-fill-sweep 290ms cubic-bezier(0.18, 0.8, 0.2, 1) both;
+}
+
+.task-row.is-completing > * {
+  position: relative;
+  z-index: 1;
 }
 
 .is-completing .complete-button {
@@ -49,9 +62,9 @@
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);
   }
-  48% {
+  64% {
     opacity: 1;
-    transform: translate3d(0, -2px, 0) scale(1.006);
+    transform: translate3d(0, -1px, 0) scale(1.004);
   }
   100% {
     opacity: 0;
@@ -59,15 +72,12 @@
   }
 }
 
-@keyframes completion-flash {
-  0% {
-    opacity: 0;
+@keyframes completion-fill-sweep {
+  from {
+    transform: scaleX(0);
   }
-  24% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
+  to {
+    transform: scaleX(1);
   }
 }
 
