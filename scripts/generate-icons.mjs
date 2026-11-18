@@ -20,9 +20,9 @@ const icon = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5
       <stop offset="1" stop-color="#4327B8" stop-opacity=".34"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
-  <rect width="512" height="512" rx="116" fill="url(#shine)"/>
-  <rect width="512" height="512" rx="116" fill="url(#edge)"/>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#shine)"/>
+  <rect width="512" height="512" fill="url(#edge)"/>
   <path d="M145 158h202M145 256h123M145 354h72" stroke="white" stroke-width="34" stroke-linecap="round"/>
   <path d="m267 352 41 41 69-91" fill="none" stroke="white" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`)
@@ -48,8 +48,8 @@ const maskable = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url))
 await mkdir(publicDir, { recursive: true })
 await Promise.all([
-  sharp(icon).resize(192, 192).png().toFile(resolve(publicDir, 'pwa-192x192.png')),
-  sharp(icon).resize(512, 512).png().toFile(resolve(publicDir, 'pwa-512x512.png')),
-  sharp(icon).resize(180, 180).png().toFile(resolve(publicDir, 'apple-touch-icon.png')),
-  sharp(maskable).resize(512, 512).png().toFile(resolve(publicDir, 'pwa-maskable-512x512.png'))
+  sharp(icon).resize(192, 192).png().toFile(resolve(publicDir, 'pwa-192x192-v2.png')),
+  sharp(icon).resize(512, 512).png().toFile(resolve(publicDir, 'pwa-512x512-v2.png')),
+  sharp(icon).resize(180, 180).png().toFile(resolve(publicDir, 'apple-touch-icon-v2.png')),
+  sharp(maskable).resize(512, 512).png().toFile(resolve(publicDir, 'pwa-maskable-512x512-v2.png'))
 ])

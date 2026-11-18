@@ -7,7 +7,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon-v2.png'],
       manifest: {
         name: 'Dayline — 每日清单',
         short_name: 'Dayline',
@@ -24,17 +24,19 @@ export default defineConfig({
         theme_color: '#eef2f6',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'pwa-192x192-v2.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'pwa-512x512-v2.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
-            src: 'pwa-maskable-512x512.png',
+            src: 'pwa-maskable-512x512-v2.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
