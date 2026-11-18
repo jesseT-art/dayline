@@ -25,70 +25,84 @@ export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORE_KEY)
     if (!raw) return createDefaultData()
-    const parsed = JSON.parse(raw) as Partial<AppData>
-    const defaults = createDefaultData()
-
-    const tasks = Array.isArray(parsed.tasks)
-      ? parsed.tasks
-          .filter((task): task is Task => Boolean(task?.id && task?.title && task?.dueDate))
-          .map((task) => ({
-            ...task,
-            note: typeof task.note === 'string' ? task.note : '',
-            priority: priorities.includes(task.priority) ? task.priority : 'normal',
-            status:
-              task.status === 'completed' || task.status === 'skipped' || task.status === 'active'
-                ? task.status
-                : 'active',
-            createdAt: task.createdAt || new Date().toISOString(),
-            statusAt: task.statusAt || null
-          }))
-      : []
-
-    const series = Array.isArray(parsed.series)
-      ? parsed.series
-          .filter((item): item is WeeklySeries => Boolean(item?.id && item?.title && item?.startDate))
-          .map((item) => ({
-            ...item,
-            note: typeof item.note === 'string' ? item.note : '',
-            priority: priorities.includes(item.priority) ? item.priority : 'normal',
-            weekdays: Array.isArray(item.weekdays)
-              ? item.weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
-              : [weekdayOfKey(item.startDate)],
-            exceptions: Array.isArray(item.exceptions) ? item.exceptions : [],
-            createdAt: item.createdAt || new Date().toISOString()
-          }))
-      : []
-
-    const summaries = Array.isArray(parsed.summaries)
-      ? parsed.summaries
-          .filter(
-            (summary): summary is DailySummary =>
-              Boolean(summary?.date && summary?.content) &&
-              (summary.kind === 'work' || summary.kind === 'study')
-          )
-          .map((summary) => ({
-            date: summary.date,
-            kind: summary.kind,
-            content: summary.content,
-            updatedAt: summary.updatedAt || new Date().toISOString()
-          }))
-      : []
-
-    const preferences = parsed.preferences
-    return {
-      version: 1,
-      tasks,
-      series,
-      summaries,
-      preferences: {
-        theme: preferences && themes.includes(preferences.theme) ? preferences.theme : defaults.preferences.theme,
-        accent:
-          preferences && accents.includes(preferences.accent) ? preferences.accent : defaults.preferences.accent
-      }
-    }
+    return normalizeData(JSON.parse(raw) as Partial<AppData>)
   } catch (error) {
     console.warn('Dayline could not read local data.', error)
     return createDefaultData()
+  }
+}
+
+export function parseBackupData(raw: string): AppData | null {
+  try {
+    const parsed = JSON.parse(raw) as Partial<AppData>
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    if (!Array.isArray(parsed.tasks) || !Array.isArray(parsed.series)) return null
+    return normalizeData(parsed)
+  } catch {
+    return null
+  }
+}
+
+function normalizeData(parsed: Partial<AppData>): AppData {
+  const defaults = createDefaultData()
+
+  const tasks = Array.isArray(parsed.tasks)
+    ? parsed.tasks
+        .filter((task): task is Task => Boolean(task?.id && task?.title && task?.dueDate))
+        .map((task) => ({
+          ...task,
+          note: typeof task.note === 'string' ? task.note : '',
+          priority: priorities.includes(task.priority) ? task.priority : 'normal',
+          status:
+            task.status === 'completed' || task.status === 'skipped' || task.status === 'active'
+              ? task.status
+              : 'active',
+          createdAt: task.createdAt || new Date().toISOString(),
+          statusAt: task.statusAt || null
+        }))
+    : []
+
+  const series = Array.isArray(parsed.series)
+    ? parsed.series
+        .filter((item): item is WeeklySeries => Boolean(item?.id && item?.title && item?.startDate))
+        .map((item) => ({
+          ...item,
+          note: typeof item.note === 'string' ? item.note : '',
+          priority: priorities.includes(item.priority) ? item.priority : 'normal',
+          weekdays: Array.isArray(item.weekdays)
+            ? item.weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+            : [weekdayOfKey(item.startDate)],
+          exceptions: Array.isArray(item.exceptions) ? item.exceptions : [],
+          createdAt: item.createdAt || new Date().toISOString()
+        }))
+    : []
+
+  const summaries = Array.isArray(parsed.summaries)
+    ? parsed.summaries
+        .filter(
+          (summary): summary is DailySummary =>
+            Boolean(summary?.date && summary?.content) &&
+            (summary.kind === 'work' || summary.kind === 'study')
+        )
+        .map((summary) => ({
+          date: summary.date,
+          kind: summary.kind,
+          content: summary.content,
+          updatedAt: summary.updatedAt || new Date().toISOString()
+        }))
+    : []
+
+  const preferences = parsed.preferences
+  return {
+    version: 1,
+    tasks,
+    series,
+    summaries,
+    preferences: {
+      theme: preferences && themes.includes(preferences.theme) ? preferences.theme : defaults.preferences.theme,
+      accent:
+        preferences && accents.includes(preferences.accent) ? preferences.accent : defaults.preferences.accent
+    }
   }
 }
 

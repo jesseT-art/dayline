@@ -1,0 +1,106 @@
+.backup-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.backup-action-grid > button {
+  display: flex;
+  min-width: 0;
+  min-height: 60px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 11%, transparent), color-mix(in srgb, var(--accent-3) 7%, transparent)),
+    var(--glass-bg);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.backup-action-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white;
+}
+
+.backup-action-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.backup-action-grid strong,
+.backup-action-grid small {
+  display: block;
+}
+
+.backup-action-grid strong {
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.backup-action-grid small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.backup-summary-grid > div {
+  display: grid;
+  min-height: 62px;
+  place-items: center;
+  align-content: center;
+  border: 1px solid var(--glass-border);
+  border-radius: 13px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent),
+    var(--glass-bg);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.backup-summary-grid strong {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 740;
+}
+
+.backup-summary-grid span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.action-list .backup-confirm-action {
+  border: 0;
+  background: linear-gradient(112deg, var(--accent), var(--accent-2) 50%, var(--accent-3));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: white;
+}
+
+.action-list .backup-confirm-action svg {
+  color: white;
+}
+
+@media (max-width: 350px) {
+  .backup-action-grid {
+    grid-template-columns: 1fr;
+  }
+}

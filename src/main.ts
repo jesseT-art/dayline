@@ -1,5 +1,6 @@
 import './style.css'
 import './completion.css'
+import './backup.css'
 import {
   WEEKDAY_SHORT,
   WEEKDAY_START_MONDAY,
@@ -17,7 +18,7 @@ import {
   todayKey,
   weekdayOfKey
 } from './date'
-import { loadData, newId, reconcileWeeklyTasks, saveData } from './storage'
+import { loadData, newId, parseBackupData, reconcileWeeklyTasks, saveData } from './storage'
 import type { AccentName, AppData, SummaryKind, Task, TaskStatus, ThemeMode } from './types'
 
 type ComposerDraft = {
@@ -45,6 +46,8 @@ const icons = {
   more: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="18" cy="12" r="1.5" fill="currentColor"/></svg>`,
   close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
   summary: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h9l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M15 3.8V8h4M8.5 12h7M8.5 15.5h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v11M8 10.5l4 4 4-4M5 18.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5v-11M8 8.5l4-4 4 4M5 18.5h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M7.5 7l.7 13h7.6l.7-13M10 11v5M14 11v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   restore: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8v5h5M6.2 16a7 7 0 1 0 .5-8.5L5 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   repeat: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.5l-2.2-2.2M17 17H7.5l2.2 2.2M17 7l2 2-2 2M7 17l-2-2 2-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -75,6 +78,7 @@ const completingTasks = new Set<string>()
 const modalHistory: string[] = []
 let suppressedPopstates = 0
 let draft: ComposerDraft = createDraft(viewDate)
+let pendingImportedData: AppData | null = null
 
 app.innerHTML = `
   <div class="app-frame">
@@ -161,6 +165,22 @@ app.innerHTML = `
         </button>
       </div>
       <div id="summaryBody"></div>
+    </section>
+  </div>
+
+  <div class="modal-layer" id="backupConfirmModal" hidden>
+    <button class="modal-scrim" type="button" data-action="cancel-import" aria-label="取消导入"></button>
+    <section class="modal-sheet backup-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="backupConfirmTitle">
+      <div class="sheet-head">
+        <div>
+          <div class="eyebrow">RESTORE BACKUP</div>
+          <h2 id="backupConfirmTitle">恢复备份？</h2>
+        </div>
+        <button class="icon-button" type="button" data-action="cancel-import" aria-label="取消">
+          ${icons.close}
+        </button>
+      </div>
+      <div id="backupConfirmBody"></div>
     </section>
   </div>
 
@@ -811,6 +831,21 @@ function renderSettings(): void {
       </div>
     </section>
     <section class="settings-section">
+      <h3>数据备份</h3>
+      <p class="settings-copy">导出包含清单、每日总结、重复任务和主题设置的 JSON 文件。导入前会再次确认。</p>
+      <div class="backup-action-grid">
+        <button type="button" data-action="export-backup">
+          <span class="backup-action-icon">${icons.download}</span>
+          <span><strong>导出备份</strong><small>保存到文件或分享</small></span>
+        </button>
+        <button type="button" data-action="import-backup">
+          <span class="backup-action-icon">${icons.upload}</span>
+          <span><strong>导入恢复</strong><small>选择 Dayline JSON</small></span>
+        </button>
+      </div>
+      <input id="backupFileInput" class="backup-file-input" type="file" accept="application/json,.json" hidden />
+    </section>
+    <section class="settings-section">
       <h3>安装到桌面</h3>
       <p class="settings-copy">安装后可从主屏幕直接打开，离线也能记录。iPhone 请在 Safari 中点“分享”再选择“添加到主屏幕”。</p>
       <button class="wide-button" type="button" data-action="install-app" ${deferredInstallPrompt ? '' : 'hidden'}>
@@ -829,6 +864,112 @@ function renderSettings(): void {
       <div><strong>Dayline</strong><span>A clearer day, one line at a time.</span></div>
     </div>
   `
+}
+
+async function exportBackup(): Promise<void> {
+  const backup = {
+    ...data,
+    exportedAt: new Date().toISOString()
+  }
+  const fileName = `dayline-backup-${todayKey()}.json`
+  const file = new File([JSON.stringify(backup, null, 2)], fileName, {
+    type: 'application/json'
+  })
+  const shareNavigator = navigator as Navigator & {
+    canShare?: (shareData: { files: File[] }) => boolean
+    share?: (shareData: { files: File[]; title?: string; text?: string }) => Promise<void>
+  }
+
+  if (
+    document.documentElement.dataset.platform === 'ios' &&
+    shareNavigator.canShare?.({ files: [file] }) &&
+    shareNavigator.share
+  ) {
+    try {
+      await shareNavigator.share({
+        files: [file],
+        title: 'Dayline 数据备份',
+        text: '请将此备份文件保存到“文件”应用。'
+      })
+      showToast('备份文件已准备好')
+      return
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+    }
+  }
+
+  const url = URL.createObjectURL(file)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  showToast('备份文件已导出')
+}
+
+async function readBackupFile(file: File): Promise<void> {
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('备份文件不能超过 10MB')
+    return
+  }
+  let imported: AppData | null = null
+  try {
+    imported = parseBackupData(await file.text())
+  } catch {
+    imported = null
+  }
+  if (!imported) {
+    showToast('无法识别该备份文件')
+    return
+  }
+  pendingImportedData = imported
+  renderBackupConfirmation(imported)
+  showModal('backupConfirmModal')
+}
+
+function renderBackupConfirmation(backup: AppData): void {
+  const body = document.querySelector<HTMLElement>('#backupConfirmBody')
+  if (!body) return
+  body.innerHTML = `
+    <div class="backup-summary-grid">
+      <div><strong>${backup.tasks.length}</strong><span>条清单</span></div>
+      <div><strong>${backup.summaries.length}</strong><span>条总结</span></div>
+      <div><strong>${backup.series.length}</strong><span>个重复系列</span></div>
+    </div>
+    <p class="series-confirm-copy">
+      恢复后将覆盖当前设备上的清单、总结、重复规则和主题设置。建议先导出当前数据作为备份。
+    </p>
+    <div class="action-list">
+      <button type="button" data-action="cancel-import">取消</button>
+      <button class="backup-confirm-action" type="button" data-action="confirm-import">${icons.upload}<span>确认恢复备份</span></button>
+    </div>
+  `
+}
+
+function applyImportedBackup(): void {
+  if (!pendingImportedData) return
+  data.tasks = pendingImportedData.tasks
+  data.series = pendingImportedData.series
+  data.summaries = pendingImportedData.summaries
+  data.preferences = { ...pendingImportedData.preferences }
+  reconcileWeeklyTasks(data)
+  if (!saveData(data)) {
+    showToast('备份恢复失败，本地存储空间不足')
+    return
+  }
+
+  pendingImportedData = null
+  viewDate = todayKey()
+  calendarMonth = monthStart(viewDate)
+  summaryDate = viewDate
+  draft = createDraft(viewDate)
+  applyTheme()
+  hideModal('backupConfirmModal')
+  render()
+  renderSettings()
+  showToast('备份已恢复')
 }
 
 function openTaskMenu(taskId: string): void {
@@ -946,6 +1087,19 @@ function handleClick(event: MouseEvent): void {
       renderSettings()
       showModal('settingsModal')
       break
+    case 'export-backup':
+      void exportBackup()
+      break
+    case 'import-backup':
+      document.querySelector<HTMLInputElement>('#backupFileInput')?.click()
+      break
+    case 'confirm-import':
+      applyImportedBackup()
+      break
+    case 'cancel-import':
+      pendingImportedData = null
+      hideModal('backupConfirmModal')
+      break
     case 'toggle-priority':
       draft.priority = draft.priority === 'high' ? 'normal' : 'high'
       updateDraftUI()
@@ -1036,6 +1190,11 @@ function handleChange(event: Event): void {
   if (target.id === 'repeatToggle') {
     draft.repeat = target.checked
     updateDraftUI()
+  }
+  if (target.id === 'backupFileInput') {
+    const file = target.files?.[0]
+    target.value = ''
+    if (file) void readBackupFile(file)
   }
 }
 
