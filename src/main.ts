@@ -705,6 +705,8 @@ function renderCalendar(): void {
   const counts = new Map<string, number>()
   for (const task of data.tasks) counts.set(task.dueDate, (counts.get(task.dueDate) || 0) + 1)
 
+  const summaryDates = new Set(data.summaries.filter(({ content }) => content.trim()).map(({ date }) => date))
+
   body.innerHTML = `
     <div class="calendar-nav">
       <button class="icon-button" type="button" data-action="calendar-prev" aria-label="上个月">${icons.back}</button>
@@ -718,6 +720,7 @@ function renderCalendar(): void {
       ${days
         .map((day) => {
           const count = counts.get(day) || 0
+          const hasSummary = summaryDates.has(day)
           const shade = count === 0 ? 0 : Math.min(count, 4)
           return `
             <button
@@ -725,10 +728,11 @@ function renderCalendar(): void {
               class="calendar-day ${isMonthDay(day, calendarMonth) ? '' : 'is-outside'} ${day === today ? 'is-today' : ''} ${day === viewDate ? 'is-selected' : ''} shade-${shade}"
               data-action="select-date"
               data-date="${day}"
-              aria-label="${shortDate(day)}，${count} 件任务"
+              aria-label="${shortDate(day)}，${count} 件任务${hasSummary ? '，有总结' : ''}"
             >
               <span>${Number(day.slice(-2))}</span>
               ${count > 0 ? '<i></i>' : ''}
+              ${hasSummary ? '<span class="calendar-summary-mark" aria-hidden="true">记</span>' : ''}
             </button>
           `
         })
@@ -741,7 +745,7 @@ function renderCalendar(): void {
       </div>
       <span>清单较多</span>
     </div>
-    <p class="calendar-tip">点击任意日期，查看当天的完成情况。</p>
+    <p class="calendar-tip">“记”表示当天有总结。点击日期可查看当天的清单和总结。</p>
   `
 }
 

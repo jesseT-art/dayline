@@ -1251,6 +1251,20 @@ button svg {
   background: var(--accent);
 }
 
+.calendar-summary-mark {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.calendar-day.is-selected .calendar-summary-mark {
+  color: inherit;
+}
+
 .calendar-day.is-selected i {
   background: rgba(255, 255, 255, 0.8);
 }
