@@ -18,41 +18,17 @@
   color: var(--surface);
 }
 
-/* Each fragment shows a clipped copy of the card at its original position. */
 .task-row.is-shattering {
-  visibility: hidden;
+  pointer-events: none;
+  animation: task-dust-source 105ms ease-out both;
 }
 
-.task-shatter-layer {
+.task-shatter-dust {
   position: fixed;
-  inset: 0;
   z-index: 85;
-  overflow: hidden;
   pointer-events: none;
 }
 
-.task-shatter-piece {
-  position: absolute;
-  animation: task-shatter-out 460ms cubic-bezier(.14,.7,.32,1) both;
-}
-
-.task-shatter-piece .task-row {
-  position: absolute;
-  inset: 0;
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  animation: none;
-  transform: none;
-  content-visibility: visible;
-}
-
-@keyframes task-shatter-out {
-  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
-  30% { opacity: .96; }
-  100% {
-    opacity: 0;
-    transform: translate(var(--shatter-x), var(--shatter-y)) rotate(var(--shatter-spin)) scale(.73);
-  }
+@keyframes task-dust-source {
+  to { opacity: 0; }
 }

@@ -1343,58 +1343,73 @@ function openQuickAdd(taskId?: string): void {
   titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
-const taskShatterMs = 460
+const taskShatterMs = 520
 
 function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
   const bounds = row.getBoundingClientRect()
   if (!bounds.width || !bounds.height || bounds.bottom < 0 || bounds.top > window.innerHeight) return null
 
-  const layer = document.createElement('div')
-  layer.className = 'task-shatter-layer'
-  layer.setAttribute('aria-hidden', 'true')
-  layer.inert = true
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (!context) return null
 
-  const columns = 6
-  const rows = 4
-  const offset = (index: number, count: number) =>
-    index === 0 || index === count ? 0 : (Math.random() - 0.5) * 0.58
-  const points = Array.from({ length: rows + 1 }, (_, y) =>
-    Array.from({ length: columns + 1 }, (_, x) => [
-      (x + offset(x, columns)) * 100 / columns,
-      (y + offset(y, rows)) * 100 / rows
-    ])
-  )
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < columns; x++) {
-      const topLeft = points[y][x]
-      const topRight = points[y][x + 1]
-      const bottomLeft = points[y + 1][x]
-      const bottomRight = points[y + 1][x + 1]
-      for (const corners of [[topLeft, topRight, bottomLeft], [topRight, bottomRight, bottomLeft]]) {
-        const piece = document.createElement('div')
-        piece.className = 'task-shatter-piece'
-        piece.style.left = `${bounds.left}px`
-        piece.style.top = `${bounds.top}px`
-        piece.style.width = `${bounds.width}px`
-        piece.style.height = `${bounds.height}px`
-        piece.style.clipPath = `polygon(${corners.map(([px, py]) => `${px}% ${py}%`).join(',')})`
-        const center = corners.reduce(([cx, cy], [px, py]) => [cx + px / 3, cy + py / 3], [0, 0])
-        piece.style.transformOrigin = `${center[0]}% ${center[1]}%`
-        piece.style.setProperty('--shatter-x', `${(center[0] - 50) * 1.8}px`)
-        piece.style.setProperty('--shatter-y', `${(center[1] - 50) * 0.82 + 26}px`)
-        piece.style.setProperty('--shatter-spin', `${(center[0] - 50) * 0.6 + (center[1] - 50) * 0.35}deg`)
-        piece.style.animationDuration = `${taskShatterMs}ms`
-        const copy = row.cloneNode(true) as HTMLElement
-        copy.removeAttribute('data-task-id')
-        piece.append(copy)
-        layer.append(piece)
-      }
+  const padding = 94
+  const width = bounds.width + padding * 2
+  const height = bounds.height + padding * 2
+  const scale = Math.min(window.devicePixelRatio || 1, 2)
+  canvas.className = 'task-shatter-dust'
+  canvas.setAttribute('aria-hidden', 'true')
+  canvas.style.left = `${bounds.left - padding}px`
+  canvas.style.top = `${bounds.top - padding}px`
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height}px`
+  canvas.width = Math.ceil(width * scale)
+  canvas.height = Math.ceil(height * scale)
+  context.scale(scale, scale)
+
+  const theme = getComputedStyle(row)
+  const colors = ['--accent', '--accent-2', '--accent-3', '--ink-secondary']
+    .map((name) => theme.getPropertyValue(name).trim())
+  const count = Math.max(360, Math.min(720, Math.round(bounds.width * bounds.height / 48)))
+  const particles = Array.from({ length: count }, () => {
+    const x = Math.random()
+    const y = Math.random()
+    return {
+      x: padding + x * bounds.width,
+      y: padding + y * bounds.height,
+      dx: (x - 0.5) * 94 + (Math.random() - 0.5) * 60,
+      dy: (y - 0.5) * 68 + (Math.random() - 0.5) * 60,
+      size: 0.65 + Math.random() ** 2 * 2.5,
+      opacity: 0.45 + Math.random() * 0.5,
+      life: 0.48 + Math.random() * 0.52,
+      color: colors[Math.floor(Math.random() * colors.length)] || '#7489b8'
     }
-  }
-  document.body.append(layer)
+  })
+
+  document.body.append(canvas)
   row.classList.add('is-shattering')
-  return layer
+  const start = performance.now()
+  const draw = (now: number) => {
+    if (!canvas.isConnected) return
+    const time = Math.min(1, Math.max(0, (now - start) / taskShatterMs))
+    const distance = 1 - (1 - time) ** 3
+    context.clearRect(0, 0, width, height)
+    for (const particle of particles) {
+      const progress = time / particle.life
+      if (progress >= 1) continue
+      const x = particle.x + particle.dx * distance
+      const y = particle.y + particle.dy * distance + 22 * time ** 2
+      const size = particle.size * (1 - progress * 0.6)
+      context.globalAlpha = particle.opacity * (1 - progress ** 1.5)
+      context.fillStyle = particle.color
+      context.fillRect(x, y, size, size)
+    }
+    if (time < 1) requestAnimationFrame(draw)
+    else canvas.remove()
+  }
+  draw(start)
+  return canvas
 }
 
 function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void {
