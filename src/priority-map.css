@@ -1,0 +1,84 @@
+#overviewModal .overview-sheet {
+  width: min(100%, 860px);
+  max-height: min(94dvh, 100%);
+  overflow-y: auto;
+}
+
+.map-root, .map-branch, .map-editor {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent));
+}
+
+.map-root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+}
+
+.map-root small { display: block; color: var(--ink-secondary); }
+.map-hint, .map-empty { font-size: 11px; color: var(--ink-secondary); }
+.map-hint { margin: 8px 0; }
+.map-branches {
+  display: grid;
+  gap: 7px;
+  padding: 7px 0 2px 15px;
+  background: linear-gradient(var(--line), var(--line)) 4px 0 / 1px 100% no-repeat;
+}
+.map-branch { position: relative; min-width: 0; padding: 6px; }
+.map-branch::before {
+  content: '';
+  position: absolute;
+  inset: 15px auto auto -12px;
+  width: 11px;
+  border-top: 1px solid var(--line);
+}
+.map-branch h3 { margin: 0 0 4px 4px; font-size: 12px; }
+.map-branch h3 small { margin-inline-start: 3px; color: var(--ink-secondary); }
+.map-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 135px), 1fr)); gap: 4px; }
+.map-card.task-row {
+  display: block;
+  min-height: 0;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--surface);
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.map-card-main, .map-card-meta, .map-level-controls { display: flex; align-items: center; gap: 3px; }
+.map-card-main strong { flex: 1; min-width: 0; font-size: 11px; overflow-wrap: anywhere; line-height: 1.25; }
+.map-card-meta { justify-content: flex-end; font-size: 9px; color: var(--ink-secondary); }
+.map-card-meta select { min-width: 0; max-width: 76px; padding: 0; font-size: inherit; }
+.map-grip { padding: 2px 4px; cursor: grab; touch-action: none; }
+.map-card.map-current { border-color: var(--accent); }
+.map-current .map-card-meta { color: var(--accent); }
+.map-drop { outline: 2px solid var(--accent); }
+.map-control {
+  border: 0;
+  border-radius: 7px;
+  padding: 4px 6px;
+  background: var(--surface-muted);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+.map-card .map-control { flex: 0 0 auto; min-width: 20px; padding: 3px; }
+.map-control:disabled { opacity: .4; }
+.map-editor { display: grid; gap: 5px; margin-top: 7px; padding: 8px; }
+.map-level-controls input, .map-card-meta select {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.map-level-controls input { flex: 1; min-width: 0; padding: 5px; }
+.map-empty { padding: 3px 5px; }
+@media (max-width: 380px) {
+  .map-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* The editor can open above the map after choosing a card action. */
+#quickAddModal { z-index: 51; }

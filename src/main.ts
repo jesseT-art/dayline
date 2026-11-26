@@ -1,6 +1,7 @@
 import './style.css'
 import './completion.css'
 import './backup.css'
+import './priority-map.css'
 import {
   WEEKDAY_SHORT,
   WEEKDAY_START_MONDAY,
@@ -201,12 +202,12 @@ app.innerHTML = `
   </div>
 
   <div class="modal-layer" id="overviewModal" hidden>
-    <button class="modal-scrim" type="button" data-action="close-modal" data-modal="overviewModal" aria-label="关闭总览"></button>
+    <button class="modal-scrim" type="button" data-action="close-modal" data-modal="overviewModal" aria-label="关闭优先级导图"></button>
     <section class="modal-sheet overview-sheet" role="dialog" aria-modal="true" aria-labelledby="overviewTitle">
       <div class="sheet-head">
         <div>
           <div class="eyebrow">TODAY</div>
-          <h2 id="overviewTitle">今日清单总览</h2>
+          <h2 id="overviewTitle">优先级导图</h2>
         </div>
         <button class="icon-button" type="button" data-action="close-modal" data-modal="overviewModal" aria-label="关闭">
           ${icons.close}
@@ -505,7 +506,7 @@ function renderTodaySummary(): void {
           <span class="metric skipped"><i></i>无需 <strong>${skipped.length}</strong></span>
         </div>
         <button class="overview-link" type="button" data-action="open-overview">
-          清单总览 ${icons.next}
+          优先级导图 ${icons.next}
         </button>
       </div>
     </section>
@@ -667,19 +668,20 @@ type TaskDrag = {
   active: boolean
   target: HTMLElement | null
   after: boolean
+  branch: HTMLElement | null
 }
 
 let taskDrag: TaskDrag | null = null
 
 function startTaskDrag(event: PointerEvent): void {
   if (taskDrag || !event.isPrimary || event.button !== 0 || !(event.target instanceof Element)) return
-  if (event.target.closest('button')) return
-  const row = event.target.closest<HTMLElement>('#taskList .task-group:not(.finished-group) .task-row')
+  if (event.target.closest('button, select, input')) return
+  const row = event.target.closest<HTMLElement>('#taskList .task-group:not(.finished-group) .task-row, [data-map-level] .map-card')
   if (!row) return
 
   const drag: TaskDrag = {
     pointerId: event.pointerId, row, x: event.clientX, y: event.clientY,
-    timer: 0, active: false, target: null, after: false
+    timer: 0, active: false, target: null, after: false, branch: null
   }
   taskDrag = drag
   drag.timer = window.setTimeout(() => {
@@ -703,7 +705,26 @@ function moveTaskDrag(event: PointerEvent): void {
   }
 
   drag.target?.classList.remove('drop-before', 'drop-after')
-  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.task-row')
+  const hit = document.elementFromPoint(event.clientX, event.clientY)
+  const target = hit?.closest<HTMLElement>('.task-row')
+  if (drag.row.classList.contains('map-card')) {
+    drag.branch?.classList.remove('map-drop')
+    drag.branch = hit?.closest<HTMLElement>('[data-map-level]') ?? null
+    drag.branch?.classList.add('map-drop')
+    drag.target = drag.branch && target && target !== drag.row ? target : null
+    if (drag.target) {
+      const rect = drag.target.getBoundingClientRect()
+      drag.after = event.clientX > rect.left + rect.width / 2
+      drag.target.classList.add(drag.after ? 'drop-after' : 'drop-before')
+    }
+    const sheet = drag.row.closest<HTMLElement>('.modal-sheet')
+    const bounds = sheet?.getBoundingClientRect()
+    if (sheet && bounds) {
+      if (event.clientY < bounds.top + 72) sheet.scrollBy(0, -18)
+      else if (event.clientY > bounds.bottom - 72) sheet.scrollBy(0, 18)
+    }
+    return
+  }
   drag.target = target && target !== drag.row && target.parentElement === drag.row.parentElement ? target : null
   if (drag.target) {
     const rect = drag.target.getBoundingClientRect()
@@ -721,11 +742,23 @@ function endTaskDrag(event: PointerEvent): void {
   window.clearTimeout(drag.timer)
   drag.row.classList.remove('is-dragging')
   drag.target?.classList.remove('drop-before', 'drop-after')
+  drag.branch?.classList.remove('map-drop')
+  if (drag.row.classList.contains('map-card')) {
+    const level = drag.branch?.dataset.mapLevel
+    const id = drag.row.dataset.taskId
+    if (event.type === 'pointerup' && level && id && (drag.target || level !== drag.row.closest<HTMLElement>('[data-map-level]')?.dataset.mapLevel)) {
+      moveMapTask(id, level, drag.target?.dataset.taskId, drag.after)
+    }
+    return
+  }
   if (event.type !== 'pointerup' || !drag.target || !drag.row.parentElement) return
 
   const rows = [...drag.row.parentElement.querySelectorAll<HTMLElement>('.task-row')].filter((row) => row !== drag.row)
   rows.splice(rows.indexOf(drag.target) + Number(drag.after), 0, drag.row)
   const tasksById = new Map(data.tasks.map((task) => [task.id, task]))
+  const movedTask = tasksById.get(drag.row.dataset.taskId ?? '')
+  const targetTask = tasksById.get(drag.target.dataset.taskId ?? '')
+  if (movedTask && targetTask) movedTask.priorityLevelId = targetTask.priorityLevelId
   rows.forEach((row, index) => {
     const task = tasksById.get(row.dataset.taskId ?? '')
     if (task) task.manualOrder = index
@@ -842,37 +875,119 @@ function renderCalendar(): void {
   `
 }
 
+function priorityLevelOf(task: Task): string {
+  return data.priorityLevels.some((level) => level.id === task.priorityLevelId)
+    ? task.priorityLevelId!
+    : 'unassigned'
+}
+
+let editingLevels = false
+
 function renderOverview(): void {
   const body = document.querySelector<HTMLElement>('#overviewBody')
   if (!body) return
-  const active = activeForToday()
-  const completed = finishedForToday('completed')
-  const skipped = finishedForToday('skipped')
+
+  const active = sortTasks(activeForToday())
+  const completed = sortTasks(finishedForToday('completed'))
+  const skipped = sortTasks(finishedForToday('skipped'))
+  const current = active.find((task) => priorityLevelOf(task) !== 'unassigned')
+  const levels = [...data.priorityLevels, { id: 'unassigned', name: '待排序' }]
 
   body.innerHTML = `
-    <div class="overview-section">
-      <div class="overview-label"><span>待完成</span><em>${active.length}</em></div>
-      <div class="overview-list">
-        ${active.length ? sortTasks(active).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('没有待完成的任务')}
-      </div>
+    <div class="map-root">
+      <div><strong>今日清单</strong><small>${active.length + completed.length + skipped.length} 件 · ${active.length} 待办</small></div>
+      <button type="button" class="map-control" data-action="map-edit-levels">${editingLevels ? '完成设置' : '管理等级'}</button>
     </div>
-    <div class="overview-section">
-      <div class="overview-label"><span>已完成</span><em>${completed.length}</em></div>
-      <div class="overview-list">
-        ${completed.length ? sortTasks(completed).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('今天还没有完成记录')}
+    ${editingLevels ? `
+      <div class="map-editor">
+        ${data.priorityLevels.map((level, index) => `
+          <div class="map-level-controls">
+            <input aria-label="等级名称" data-level-name="${level.id}" maxlength="20" value="${escapeHtml(level.name)}">
+            <button type="button" class="map-control" data-action="map-level-up" data-id="${level.id}" aria-label="上移等级" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" class="map-control" data-action="map-level-down" data-id="${level.id}" aria-label="下移等级" ${index === data.priorityLevels.length - 1 ? 'disabled' : ''}>↓</button>
+            <button type="button" class="map-control" data-action="map-level-delete" data-id="${level.id}" aria-label="删除等级">×</button>
+          </div>
+        `).join('')}
+        <button type="button" class="map-control" data-action="map-level-add">＋ 添加等级</button>
       </div>
-    </div>
-    <div class="overview-section">
-      <div class="overview-label"><span>今日无需完成</span><em>${skipped.length}</em></div>
-      <div class="overview-list">
-        ${skipped.length ? sortTasks(skipped).map((task) => taskRow(task, 'overview')).join('') : emptyOverview('没有标记为无需完成的任务')}
-      </div>
+    ` : '<p class="map-hint">长按卡片拖动。上方等级优先，同一等级从左到右、从上到下。</p>'}
+    <div class="map-branches">
+      ${levels.map((level) => {
+        const tasks = active.filter((task) => priorityLevelOf(task) === level.id)
+        return `
+          <section class="map-branch" data-map-level="${level.id}">
+            <h3>${escapeHtml(level.name)} <small>${tasks.length}</small></h3>
+            <div class="map-cards">
+              ${tasks.map((task) => mapCard(task, task.id === current?.id, levels)).join('') || '<small class="map-empty">拖到这里</small>'}
+            </div>
+          </section>
+        `
+      }).join('')}
+      ${[{ name: '已完成', tasks: completed }, { name: '今日无需完成', tasks: skipped }].map(({ name, tasks }) => tasks.length ? `
+        <section class="map-branch map-finished">
+          <h3>${name} <small>${tasks.length}</small></h3>
+          <div class="map-cards">${tasks.map((task) => mapCard(task, false, levels)).join('')}</div>
+        </section>
+      ` : '').join('')}
     </div>
   `
 }
 
-function emptyOverview(text: string): string {
-  return `<p class="overview-empty">${text}</p>`
+function mapCard(task: Task, current: boolean, levels: { id: string; name: string }[]): string {
+  return `
+    <article class="map-card task-row ${current ? 'map-current' : ''}" data-task-id="${escapeHtml(task.id)}">
+      <div class="map-card-main">
+        <button type="button" class="map-control map-check" data-action="${task.status === 'active' ? 'complete-task' : 'open-task-menu'}"
+          data-id="${escapeHtml(task.id)}" aria-label="${task.status === 'active' ? '标记完成' : '任务操作'}">${task.status === 'active' ? '○' : task.status === 'skipped' ? '–' : '✓'}</button>
+        <strong>${escapeHtml(task.title)}</strong>
+        <button type="button" class="map-control" data-action="open-task-menu" data-id="${escapeHtml(task.id)}" aria-label="更多操作">⋯</button>
+      </div>
+      ${task.status === 'active' ? `
+        <div class="map-card-meta">
+          ${current ? '<span>当前</span>' : ''}${task.priority === 'high' ? '<span>重要</span>' : ''}
+          <select aria-label="移动任务到等级" data-map-move="${escapeHtml(task.id)}">
+            ${levels.map((level) => `<option value="${level.id}" ${priorityLevelOf(task) === level.id ? 'selected' : ''}>${escapeHtml(level.name)}</option>`).join('')}
+          </select>
+          <span class="map-grip" aria-hidden="true">⋮⋮</span>
+        </div>
+      ` : ''}
+    </article>
+  `
+}
+
+function moveMapTask(id: string, levelId: string, targetId?: string, after = false): void {
+  const tasks = sortTasks(activeForToday())
+  const task = tasks.find((item) => item.id === id)
+  if (!task) return
+  const peers = tasks.filter((item) => item.id !== id && priorityLevelOf(item) === levelId)
+  const index = peers.findIndex((item) => item.id === targetId)
+  peers.splice(index < 0 ? peers.length : index + Number(after), 0, task)
+  task.priorityLevelId = levelId === 'unassigned' ? undefined : levelId
+  peers.forEach((item, order) => { item.manualOrder = order })
+  persist()
+  renderTasks()
+  renderOverview()
+}
+
+function adjustMapLevel(action: string, id?: string): void {
+  const levels = data.priorityLevels
+  const index = levels.findIndex((level) => level.id === id)
+  if (action === 'map-edit-levels') editingLevels = !editingLevels
+  else if (action === 'map-level-add') levels.push({ id: newId(), name: '新等级' })
+  else if (index >= 0) {
+    if (action === 'map-level-delete') {
+      levels.splice(index, 1)
+      for (const task of data.tasks) if (task.priorityLevelId === id) delete task.priorityLevelId
+    } else {
+      const nextIndex = index + (action === 'map-level-up' ? -1 : 1)
+      if (nextIndex < 0 || nextIndex >= levels.length) return
+      const [level] = levels.splice(index, 1)
+      levels.splice(nextIndex, 0, level)
+    }
+  }
+  persist()
+  renderTasks()
+  renderOverview()
 }
 
 function renderSettings(): void {
@@ -1050,6 +1165,7 @@ function applyImportedBackup(): void {
   data.tasks = pendingImportedData.tasks
   data.series = pendingImportedData.series
   data.summaries = pendingImportedData.summaries
+  data.priorityLevels = pendingImportedData.priorityLevels
   data.preferences = { ...pendingImportedData.preferences }
   reconcileWeeklyTasks(data)
   if (!saveData(data)) {
@@ -1177,6 +1293,13 @@ function handleClick(event: MouseEvent): void {
         hideModal('calendarModal')
       }
       break
+    case 'map-edit-levels':
+    case 'map-level-add':
+    case 'map-level-delete':
+    case 'map-level-up':
+    case 'map-level-down':
+      adjustMapLevel(actionElement.dataset.action!, id)
+      break
     case 'open-overview':
       renderOverview()
       showModal('overviewModal')
@@ -1275,6 +1398,25 @@ function handleInput(event: Event): void {
 }
 
 function handleChange(event: Event): void {
+  const field = event.target
+  if (field instanceof HTMLSelectElement && field.dataset.mapMove) {
+    moveMapTask(field.dataset.mapMove, field.value)
+    return
+  }
+  if (field instanceof HTMLInputElement && field.dataset.levelName) {
+    const level = data.priorityLevels.find((item) => item.id === field.dataset.levelName)
+    if (level) {
+      level.name = field.value.trim() || level.name
+      field.value = level.name
+      const heading = document.querySelector(`[data-map-level="${level.id}"] h3`)
+      if (heading?.firstChild) heading.firstChild.textContent = level.name + ' '
+      const options = document.querySelectorAll<HTMLOptionElement>('.map-card select option')
+      options.forEach((option) => { if (option.value === level.id) option.textContent = level.name })
+      persist()
+    }
+    return
+  }
+
   const target = event.target as HTMLInputElement
   if (target.id === 'taskDate') {
     const previousDate = draft.dueDate
@@ -1312,8 +1454,8 @@ function handleSubmit(event: SubmitEvent): void {
 
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
-    const openModal = document.querySelector<HTMLElement>('.modal-layer:not([hidden])')
-    if (openModal?.id) hideModal(openModal.id)
+    const openModal = modalHistory.at(-1)
+    if (openModal) hideModal(openModal)
   }
 }
 
@@ -1346,6 +1488,7 @@ function addTask(): void {
     persist()
     hideModal('quickAddModal')
     render()
+    if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
     showToast('清单已修改')
     return
   }
@@ -1559,6 +1702,14 @@ function sortTasks(tasks: Task[]): Task[] {
       const order: Record<TaskStatus, number> = { active: 0, completed: 1, skipped: 2 }
       return order[a.status] - order[b.status]
     }
+    if (a.status === 'active') {
+      const levelRank = (task: Task) => {
+        const index = data.priorityLevels.findIndex((level) => level.id === task.priorityLevelId)
+        return index < 0 ? data.priorityLevels.length : index
+      }
+      const difference = levelRank(a) - levelRank(b)
+      if (difference) return difference
+    }
     if (a.status === 'active' && (a.manualOrder != null || b.manualOrder != null) && a.manualOrder !== b.manualOrder) {
       return (a.manualOrder ?? -1) - (b.manualOrder ?? -1)
     }
@@ -1674,8 +1825,8 @@ function handleModalBack(): void {
     suppressedPopstates -= 1
     return
   }
-  const openModal = [...document.querySelectorAll<HTMLElement>('.modal-layer:not([hidden])')].at(-1)
-  if (openModal?.id) hideModal(openModal.id, true)
+  const openModal = modalHistory.at(-1)
+  if (openModal) hideModal(openModal, true)
 }
 
 let toastHideTimer: number | undefined

@@ -13,6 +13,7 @@ export interface Task {
   status: TaskStatus
   createdAt: string
   statusAt: string | null
+  priorityLevelId?: string
   manualOrder?: number
   seriesId?: string
 }
@@ -40,8 +41,14 @@ export interface DailySummary {
   updatedAt: string
 }
 
+export interface PriorityLevel {
+  id: string
+  name: string
+}
+
 export interface AppData {
   version: 1
+  priorityLevels: PriorityLevel[]
   tasks: Task[]
   series: WeeklySeries[]
   summaries: DailySummary[]
