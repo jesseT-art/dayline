@@ -1343,7 +1343,7 @@ function openQuickAdd(taskId?: string): void {
   titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
-const taskShatterMs = 520
+const taskShatterMs = 1050
 
 function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
@@ -1369,8 +1369,14 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   context.scale(scale, scale)
 
   const theme = getComputedStyle(row)
-  const colors = ['--accent', '--accent-2', '--accent-3', '--ink-secondary']
+  const colors = ['--accent', '--accent-2', '--accent-3', '--ink']
     .map((name) => theme.getPropertyValue(name).trim())
+  const contrast = theme.getPropertyValue('--ink').trim() || '#182244'
+  const particleShades = colors.map((color) => {
+    context.fillStyle = color || contrast
+    context.fillStyle = `color-mix(in srgb, ${context.fillStyle} 69%, ${contrast})`
+    return context.fillStyle
+  })
   const count = Math.max(360, Math.min(720, Math.round(bounds.width * bounds.height / 48)))
   const particles = Array.from({ length: count }, () => {
     const x = Math.random()
@@ -1380,10 +1386,10 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
       y: padding + y * bounds.height,
       dx: (x - 0.5) * 94 + (Math.random() - 0.5) * 60,
       dy: (y - 0.5) * 68 + (Math.random() - 0.5) * 60,
-      size: 0.65 + Math.random() ** 2 * 2.5,
-      opacity: 0.45 + Math.random() * 0.5,
-      life: 0.48 + Math.random() * 0.52,
-      color: colors[Math.floor(Math.random() * colors.length)] || '#7489b8'
+      size: 1.65 + Math.random() ** 1.5 * 3.1,
+      opacity: 0.77 + Math.random() * 0.23,
+      life: 0.72 + Math.random() * 0.28,
+      color: particleShades[Math.floor(Math.random() * particleShades.length)]
     }
   })
 
@@ -1393,15 +1399,15 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   const draw = (now: number) => {
     if (!canvas.isConnected) return
     const time = Math.min(1, Math.max(0, (now - start) / taskShatterMs))
-    const distance = 1 - (1 - time) ** 3
+    const distance = 1 - (1 - time) ** 2
     context.clearRect(0, 0, width, height)
     for (const particle of particles) {
       const progress = time / particle.life
       if (progress >= 1) continue
       const x = particle.x + particle.dx * distance
       const y = particle.y + particle.dy * distance + 22 * time ** 2
-      const size = particle.size * (1 - progress * 0.6)
-      context.globalAlpha = particle.opacity * (1 - progress ** 1.5)
+      const size = particle.size * (1 - progress * 0.38)
+      context.globalAlpha = particle.opacity * (1 - progress ** 2.4)
       context.fillStyle = particle.color
       context.fillRect(x, y, size, size)
     }
