@@ -1444,6 +1444,7 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     task.statusAt = new Date().toISOString()
     persist()
     hideModal('taskModal')
+    showToast('已完成', true)
     const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420
     window.setTimeout(() => {
       highlightedTaskId = task.id
@@ -1451,7 +1452,6 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
       scheduleHighlightClear(task.id)
       if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
       completingTasks.delete(taskId)
-      showToast('已完成 · 已移至清单底部', true)
     }, delay)
     return
   }
@@ -1700,13 +1700,12 @@ function createToastRibbons(): string {
       start: `${start.toFixed(1)}px`,
       spread: `${(start + (x - start) * 0.72).toFixed(1)}px`,
       drift: `${(x).toFixed(1)}px`,
-      rise: `${(y * 0.35 + 16).toFixed(1)}px`,
+      rise: `${(y * 0.24 + 8).toFixed(1)}px`,
       fall: `${(y + 55).toFixed(1)}px`,
       width: `${width.toFixed(1)}px`,
       height: `${(isDot ? width : randomBetween(8, 16)).toFixed(1)}px`,
       spin: `${((index % 2 === 0 ? -1 : 1) * randomBetween(190, 680)).toFixed(0)}deg`,
-      duration: `${randomBetween(1400, 2110).toFixed(0)}ms`,
-      delay: `${randomBetween(0, 55).toFixed(0)}ms`
+      duration: `${randomBetween(1400, 2110).toFixed(0)}ms`
     }
     const style = Object.entries(variables).map(([key, value]) => `--${key}:${value}`).join(';')
     return `<i style="${style}"></i>`
