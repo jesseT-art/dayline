@@ -1682,24 +1682,24 @@ let toastHideTimer: number | undefined
 
 function createToastRibbons(): string {
   const colors = ['#ff415f', '#ff9026', '#ffcc00', '#30cb55', '#00ceb4', '#19b8ff', '#4169ff', '#ba53ff']
-  const reach = Math.min(window.innerWidth * 0.47, 520)
+  const reach = window.innerWidth * 0.49
   const depth = Math.min(window.innerHeight * 0.58, 510)
   const randomBetween = (min: number, max: number) => min + Math.random() * (max - min)
 
-  const count = 64
+  const count = 112
   return Array.from({ length: count }, (_, index) => {
-    const ray = ((index + Math.random()) / count * 2 - 1) * 1.23
-    const distance = randomBetween(0.45, 1)
-    const x = Math.sin(ray) * reach * distance
-    const y = Math.cos(ray) * depth * distance
+    const lane = (index + Math.random()) / count * 2 - 1
+    const x = lane * reach
+    const start = lane * Math.min(window.innerWidth * 0.34, 190)
+    const y = depth * randomBetween(0.52, 1.06)
     const width = randomBetween(4, 8)
     const isDot = index % 4 === 0
     const variables = {
       color: colors[index % colors.length],
-      start: `${randomBetween(-12, 12).toFixed(1)}px`,
-      spread: `${(x * 0.67).toFixed(1)}px`,
+      start: `${start.toFixed(1)}px`,
+      spread: `${(start + (x - start) * 0.72).toFixed(1)}px`,
       drift: `${(x).toFixed(1)}px`,
-      rise: `${(y * 0.43 + 12).toFixed(1)}px`,
+      rise: `${(y * 0.35 + 16).toFixed(1)}px`,
       fall: `${(y + 55).toFixed(1)}px`,
       width: `${width.toFixed(1)}px`,
       height: `${(isDot ? width : randomBetween(8, 16)).toFixed(1)}px`,
