@@ -3674,15 +3674,15 @@ body {
 .toast-icon svg { width: 16px; height: 16px; }
 .is-celebration .toast-icon { background: #176945; color: white; }
 .toast-ribbons {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 89;
+  overflow: hidden;
   pointer-events: none;
-  clip-path: inset(100% -100vw -100vh);
 }
 .toast-ribbons i {
   position: absolute;
-  top: 100%;
+  top: 0;
   left: 50%;
   width: var(--width);
   height: var(--height);

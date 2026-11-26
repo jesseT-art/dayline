@@ -239,6 +239,7 @@ app.innerHTML = `
     </section>
   </div>
 
+  <div class="toast-ribbons" id="toastRibbons" aria-hidden="true"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 `
 
@@ -1723,8 +1724,9 @@ function showToast(message: string, celebrate = false): void {
   toast.innerHTML = `
     <span class="toast-icon" aria-hidden="true">${celebrate ? icons.check : icons.summary}</span>
     <span class="toast-message">${escapeHtml(message)}</span>
-    ${ribbons ? `<div class="toast-ribbons" aria-hidden="true">${ribbons}</div>` : ''}
   `
+  const ribbonLayer = document.querySelector<HTMLElement>('#toastRibbons')
+  if (ribbonLayer && ribbons) ribbonLayer.innerHTML = ribbons
   toast.hidden = false
   requestAnimationFrame(() => toast.classList.add('is-visible'))
   if (toastTimer) window.clearTimeout(toastTimer)
@@ -1737,6 +1739,7 @@ function hideToast(): void {
   toast.classList.remove('is-visible')
   toastHideTimer = window.setTimeout(() => {
     toast.hidden = true
+    document.querySelector('#toastRibbons')?.replaceChildren()
   }, 180)
 }
 
