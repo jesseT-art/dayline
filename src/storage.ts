@@ -58,7 +58,8 @@ function normalizeData(parsed: Partial<AppData>): AppData {
               ? task.status
               : 'active',
           createdAt: task.createdAt || new Date().toISOString(),
-          statusAt: task.statusAt || null
+          statusAt: task.statusAt || null,
+          manualOrder: Number.isSafeInteger(task.manualOrder) ? task.manualOrder : undefined
         }))
     : []
 

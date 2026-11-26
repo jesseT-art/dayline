@@ -13,6 +13,7 @@ export interface Task {
   status: TaskStatus
   createdAt: string
   statusAt: string | null
+  manualOrder?: number
   seriesId?: string
 }
 

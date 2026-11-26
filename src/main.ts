@@ -246,6 +246,16 @@ applyTheme()
 render()
 
 document.addEventListener('click', handleClick)
+document.addEventListener('pointerdown', startTaskDrag)
+document.addEventListener('pointermove', moveTaskDrag)
+document.addEventListener('pointerup', endTaskDrag)
+document.addEventListener('pointercancel', endTaskDrag)
+document.addEventListener('touchmove', (event) => {
+  if (taskDrag?.active && event.cancelable) event.preventDefault()
+}, { passive: false })
+document.addEventListener('contextmenu', (event) => {
+  if (taskDrag?.active) event.preventDefault()
+})
 document.addEventListener('input', handleInput)
 document.addEventListener('change', handleChange)
 document.addEventListener('submit', handleSubmit)
@@ -502,16 +512,21 @@ function renderTodaySummary(): void {
   `
 }
 
+let editingTaskId: string | null = null
+
 function renderComposer(): void {
   const host = document.querySelector<HTMLElement>('#composerHost')
   if (!host) return
   const isToday = viewDate === todayKey()
   const placeholder = isToday ? '今天要做什么？' : `为${shortDate(viewDate)}记一件事`
 
+  const editing = data.tasks.find((task) => task.id === editingTaskId)
+  document.querySelector('#quickAddTitle')!.textContent = editing ? '修改清单' : '添加清单'
+
   host.innerHTML = `
     <form class="composer task-composer" id="taskForm">
       <div class="composer-caption">
-        <span>把待办写下来</span>
+        <span>${editing?.seriesId ? '仅修改这一次重复清单' : editing ? '更新清单内容' : '把待办写下来'}</span>
         <em id="draftMeta"></em>
       </div>
       <label class="title-field">
@@ -540,10 +555,10 @@ function renderComposer(): void {
         <label class="choice-button date-choice">
           <span>日期</span>
           <strong id="taskDateDisplay">${escapeHtml(compactDateLabel(draft.dueDate))}</strong>
-          <input id="taskDate" name="date" type="date" value="${draft.dueDate}" />
+          <input id="taskDate" name="date" type="date" value="${draft.dueDate}" ${editing?.seriesId ? 'disabled' : ''} />
         </label>
       </div>
-      <div class="repeat-row">
+      <div class="repeat-row" ${editing ? 'hidden' : ''}>
         <div>
           <strong>每周重复</strong>
           <span>按所选星期，每周自动列出</span>
@@ -564,7 +579,7 @@ function renderComposer(): void {
       </div>
       <button class="submit-add-bar" id="submitAddButton" type="submit">
         <span class="submit-add-icon">${icons.plus}</span>
-        <span class="submit-add-label">添加清单</span>
+        <span class="submit-add-label">${editing ? '保存修改' : '添加清单'}</span>
         <span class="submit-add-hint">Enter</span>
       </button>
     </form>
@@ -643,6 +658,83 @@ function renderTasks(): void {
   `
 }
 
+type TaskDrag = {
+  pointerId: number
+  row: HTMLElement
+  x: number
+  y: number
+  timer: number
+  active: boolean
+  target: HTMLElement | null
+  after: boolean
+}
+
+let taskDrag: TaskDrag | null = null
+
+function startTaskDrag(event: PointerEvent): void {
+  if (taskDrag || !event.isPrimary || event.button !== 0 || !(event.target instanceof Element)) return
+  if (event.target.closest('button')) return
+  const row = event.target.closest<HTMLElement>('#taskList .task-group:not(.finished-group) .task-row')
+  if (!row) return
+
+  const drag: TaskDrag = {
+    pointerId: event.pointerId, row, x: event.clientX, y: event.clientY,
+    timer: 0, active: false, target: null, after: false
+  }
+  taskDrag = drag
+  drag.timer = window.setTimeout(() => {
+    if (!row.isConnected) {
+      taskDrag = null
+      return
+    }
+    drag.active = true
+    row.setPointerCapture(event.pointerId)
+    row.classList.add('is-dragging')
+    triggerHaptic(12)
+  }, 360)
+}
+
+function moveTaskDrag(event: PointerEvent): void {
+  const drag = taskDrag
+  if (!drag || drag.pointerId !== event.pointerId) return
+  if (!drag.active) {
+    if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 8) endTaskDrag(event)
+    return
+  }
+
+  drag.target?.classList.remove('drop-before', 'drop-after')
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.task-row')
+  drag.target = target && target !== drag.row && target.parentElement === drag.row.parentElement ? target : null
+  if (drag.target) {
+    const rect = drag.target.getBoundingClientRect()
+    drag.after = event.clientY > rect.top + rect.height / 2
+    drag.target.classList.add(drag.after ? 'drop-after' : 'drop-before')
+  }
+  if (event.clientY < 100) window.scrollBy(0, -14)
+  else if (event.clientY > window.innerHeight - 110) window.scrollBy(0, 14)
+}
+
+function endTaskDrag(event: PointerEvent): void {
+  const drag = taskDrag
+  if (!drag || drag.pointerId !== event.pointerId) return
+  taskDrag = null
+  window.clearTimeout(drag.timer)
+  drag.row.classList.remove('is-dragging')
+  drag.target?.classList.remove('drop-before', 'drop-after')
+  if (event.type !== 'pointerup' || !drag.target || !drag.row.parentElement) return
+
+  const rows = [...drag.row.parentElement.querySelectorAll<HTMLElement>('.task-row')].filter((row) => row !== drag.row)
+  rows.splice(rows.indexOf(drag.target) + Number(drag.after), 0, drag.row)
+  const tasksById = new Map(data.tasks.map((task) => [task.id, task]))
+  rows.forEach((row, index) => {
+    const task = tasksById.get(row.dataset.taskId ?? '')
+    if (task) task.manualOrder = index
+  })
+  persist()
+  renderTasks()
+  showToast('顺序已保存')
+}
+
 function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string {
   const statusClass = task.status === 'active' ? '' : `is-${task.status}`
   const highlightClass = task.id === highlightedTaskId ? 'is-highlighted' : ''
@@ -678,6 +770,7 @@ function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string 
         ${task.status === 'skipped' ? icons.skip : icons.check}
       </button>
       <div class="task-copy">
+        ${context !== 'overview' && task.status === 'active' ? '<span class="task-drag-grip" title="长按拖动排序" aria-hidden="true">⋮⋮</span>' : ''}
         <div class="task-title-row">
           <h3>${escapeHtml(task.title)}</h3>
           ${task.priority === 'high' ? '<span class="priority-mark">重要</span>' : ''}
@@ -993,6 +1086,7 @@ function openTaskMenu(taskId: string): void {
       </button>
     </div>
     <div class="action-list">
+      <button type="button" data-action="edit-task" data-id="${task.id}">${icons.summary}<span>修改清单</span></button>
       ${
         task.status === 'active'
           ? `
@@ -1119,6 +1213,9 @@ function handleClick(event: MouseEvent): void {
       updateDraftUI()
       break
     }
+    case 'edit-task':
+      if (id) openQuickAdd(id)
+      break
     case 'open-task-menu':
       if (id) openTaskMenu(id)
       break
@@ -1238,6 +1335,20 @@ function addTask(): void {
   draft.title = title
   draft.note = noteInput?.value.trim() || ''
   draft.dueDate = dateInput?.value || viewDate
+  if (editingTaskId) {
+    const task = data.tasks.find((item) => item.id === editingTaskId)
+    if (!task) return
+    task.title = title
+    task.note = draft.note
+    task.priority = draft.priority
+    if (!task.seriesId) task.dueDate = draft.dueDate
+    editingTaskId = null
+    persist()
+    hideModal('quickAddModal')
+    render()
+    showToast('清单已修改')
+    return
+  }
   const timestamp = new Date().toISOString()
 
   const savedRepeat = draft.repeat
@@ -1289,8 +1400,25 @@ function addTask(): void {
   }
 }
 
-function openQuickAdd(): void {
-  draft = createDraft(viewDate)
+function openQuickAdd(taskId?: string): void {
+  const task = data.tasks.find((item) => item.id === taskId)
+  editingTaskId = task?.id ?? null
+  draft = createDraft(task?.dueDate ?? viewDate)
+  if (task) {
+    draft.title = task.title
+    draft.note = task.note
+    draft.priority = task.priority
+    const menu = document.getElementById('taskModal')
+    if (menu) {
+      menu.classList.remove('is-open')
+      menu.hidden = true
+    }
+    const menuIndex = modalHistory.lastIndexOf('taskModal')
+    if (menuIndex >= 0) {
+      modalHistory[menuIndex] = 'quickAddModal'
+      history.replaceState({ ...history.state, daylineModal: 'quickAddModal' }, '', location.href)
+    }
+  }
   renderComposer()
   showModal('quickAddModal')
   const titleInput = document.querySelector<HTMLInputElement>('#taskTitle')
@@ -1322,7 +1450,7 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
       scheduleHighlightClear(task.id)
       if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
       completingTasks.delete(taskId)
-      showToast('已完成 · 已移至清单底部')
+      showToast('已完成 · 已移至清单底部', true)
     }, delay)
     return
   }
@@ -1430,6 +1558,9 @@ function sortTasks(tasks: Task[]): Task[] {
     if (a.status !== b.status) {
       const order: Record<TaskStatus, number> = { active: 0, completed: 1, skipped: 2 }
       return order[a.status] - order[b.status]
+    }
+    if (a.status === 'active' && (a.manualOrder != null || b.manualOrder != null) && a.manualOrder !== b.manualOrder) {
+      return (a.manualOrder ?? -1) - (b.manualOrder ?? -1)
     }
     const priorityDifference = (a.priority === 'high' ? 0 : 1) - (b.priority === 'high' ? 0 : 1)
     if (priorityDifference !== 0) return priorityDifference
@@ -1547,10 +1678,24 @@ function handleModalBack(): void {
   if (openModal?.id) hideModal(openModal.id, true)
 }
 
-function showToast(message: string): void {
+let toastHideTimer: number | undefined
+
+function showToast(message: string, celebrate = false): void {
   const toast = document.querySelector<HTMLElement>('#toast')
   if (!toast) return
-  toast.innerHTML = `<span>${escapeHtml(message)}</span>`
+  window.clearTimeout(toastHideTimer)
+  toast.classList.toggle('is-celebration', celebrate)
+  const ribbons = celebrate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? Array.from({ length: 12 }, (_, index) => {
+        const drift = (index % 5 - 2) * 11
+        return `<i style="--x:${8 + index * 7.6}%;--drift:${drift}px;--delay:${index % 4 * 39}ms;--spin:${index % 2 ? 240 : -220}deg"></i>`
+      }).join('')
+    : ''
+  toast.innerHTML = `
+    <span class="toast-icon" aria-hidden="true">${celebrate ? icons.check : icons.summary}</span>
+    <span class="toast-message">${escapeHtml(message)}</span>
+    ${ribbons ? `<div class="toast-ribbons" aria-hidden="true">${ribbons}</div>` : ''}
+  `
   toast.hidden = false
   requestAnimationFrame(() => toast.classList.add('is-visible'))
   if (toastTimer) window.clearTimeout(toastTimer)
@@ -1561,7 +1706,7 @@ function hideToast(): void {
   const toast = document.querySelector<HTMLElement>('#toast')
   if (!toast) return
   toast.classList.remove('is-visible')
-  window.setTimeout(() => {
+  toastHideTimer = window.setTimeout(() => {
     toast.hidden = true
   }, 180)
 }

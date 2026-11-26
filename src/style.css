@@ -3618,3 +3618,87 @@ body {
     gap: 3px;
   }
 }
+
+/* Hold the card or use its grip to reorder the pending list. */
+#taskList .task-group:not(.finished-group) .task-row {
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.task-drag-grip {
+  float: right;
+  padding: 2px 6px 6px;
+  color: var(--ink-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+.task-row.is-dragging {
+  opacity: .58;
+  cursor: grabbing;
+}
+.task-row.drop-before { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-row.drop-after { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-row.drop-before::after,
+.task-row.drop-after::after {
+  content: '';
+  position: absolute;
+  inset-inline: 12px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--accent);
+}
+.task-row.drop-before::after { top: 0; }
+.task-row.drop-after::after { bottom: 0; }
+
+.toast {
+  isolation: isolate;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--surface) 80%, var(--line));
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 90%, var(--accent));
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 #ffffff35, 0 10px 30px #10173726;
+  transition: transform 280ms cubic-bezier(.18,.9,.32,1.16), opacity 160ms ease;
+}
+.toast .toast-message { font-size: 13px; font-weight: 650; }
+.toast .toast-icon {
+  display: grid;
+  flex: 0 0 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  color: var(--accent);
+}
+.toast-icon svg { width: 16px; height: 16px; }
+.is-celebration .toast-icon { background: #176945; color: white; }
+.toast-ribbons {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.toast-ribbons i {
+  position: absolute;
+  top: 5px;
+  left: var(--x);
+  width: 4px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  animation: toast-ribbon-fall 850ms ease-out var(--delay) both;
+}
+.toast-ribbons i:nth-child(3n) { background: #43bfa4; }
+.toast-ribbons i:nth-child(3n + 1) { background: #eca85b; }
+@keyframes toast-ribbon-fall {
+  0% { opacity: 0; transform: translate3d(0, -12px, 0) rotate(0deg); }
+  20% { opacity: .9; }
+  58% { opacity: .75; }
+  100% { opacity: 0; transform: translate3d(var(--drift), 80px, 0) rotate(var(--spin)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toast.is-visible { transform: none; transition: none; }
+  .toast-ribbons { display: none; }
+}
