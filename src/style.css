@@ -3619,36 +3619,6 @@ body {
   }
 }
 
-/* Hold the card or use its grip to reorder the pending list. */
-#taskList .task-group:not(.finished-group) .task-row {
-  user-select: none;
-  -webkit-touch-callout: none;
-}
-.task-drag-grip {
-  float: right;
-  padding: 2px 6px 6px;
-  color: var(--ink-secondary);
-  cursor: grab;
-  touch-action: none;
-}
-.task-row.is-dragging {
-  opacity: .58;
-  cursor: grabbing;
-}
-.task-row.drop-before { outline: 2px solid var(--accent); outline-offset: 2px; }
-.task-row.drop-after { outline: 2px solid var(--accent); outline-offset: 2px; }
-.task-row.drop-before::after,
-.task-row.drop-after::after {
-  content: '';
-  position: absolute;
-  inset-inline: 12px;
-  height: 3px;
-  border-radius: 99px;
-  background: var(--accent);
-}
-.task-row.drop-before::after { top: 0; }
-.task-row.drop-after::after { bottom: 0; }
-
 .toast {
   isolation: isolate;
   justify-content: flex-start;
@@ -3714,4 +3684,78 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .toast, .toast.is-visible { transform: none; transition: none; }
   .toast-ribbons { display: none; }
+}
+
+
+.undo-stack {
+  position: fixed;
+  z-index: 91;
+  inset-inline: 14px;
+  bottom: calc(84px + var(--safe-bottom));
+  display: grid;
+  gap: 6px;
+  width: min(calc(100% - 28px), 480px);
+  max-height: min(34dvh, 230px);
+  overflow-y: auto;
+  margin-inline: auto;
+  pointer-events: none;
+}
+
+.undo-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  overflow: hidden;
+  padding: 4px 8px 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  pointer-events: auto;
+  animation: undo-enter 160ms ease-out both;
+}
+
+.undo-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo-bar button {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding-inline: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.undo-bar i {
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: var(--accent);
+  transform-origin: left;
+  animation: undo-countdown 3s linear both;
+}
+
+@keyframes undo-enter {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes undo-countdown {
+  to { transform: scaleX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .undo-bar, .undo-bar i { animation: none; }
 }

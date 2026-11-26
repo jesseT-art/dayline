@@ -239,6 +239,7 @@ app.innerHTML = `
     </section>
   </div>
 
+  <div class="undo-stack" id="undoStack"></div>
   <div class="toast-ribbons" id="toastRibbons" aria-hidden="true"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 `
@@ -247,16 +248,6 @@ applyTheme()
 render()
 
 document.addEventListener('click', handleClick)
-document.addEventListener('pointerdown', startTaskDrag)
-document.addEventListener('pointermove', moveTaskDrag)
-document.addEventListener('pointerup', endTaskDrag)
-document.addEventListener('pointercancel', endTaskDrag)
-document.addEventListener('touchmove', (event) => {
-  if (taskDrag?.active && event.cancelable) event.preventDefault()
-}, { passive: false })
-document.addEventListener('contextmenu', (event) => {
-  if (taskDrag?.active) event.preventDefault()
-})
 document.addEventListener('input', handleInput)
 document.addEventListener('change', handleChange)
 document.addEventListener('submit', handleSubmit)
@@ -659,83 +650,6 @@ function renderTasks(): void {
   `
 }
 
-type TaskDrag = {
-  pointerId: number
-  row: HTMLElement
-  x: number
-  y: number
-  timer: number
-  active: boolean
-  target: HTMLElement | null
-  after: boolean
-}
-
-let taskDrag: TaskDrag | null = null
-
-function startTaskDrag(event: PointerEvent): void {
-  if (taskDrag || !event.isPrimary || event.button !== 0 || !(event.target instanceof Element)) return
-  if (event.target.closest('button')) return
-  const row = event.target.closest<HTMLElement>('#taskList .task-group:not(.finished-group) .task-row')
-  if (!row) return
-
-  const drag: TaskDrag = {
-    pointerId: event.pointerId, row, x: event.clientX, y: event.clientY,
-    timer: 0, active: false, target: null, after: false
-  }
-  taskDrag = drag
-  drag.timer = window.setTimeout(() => {
-    if (!row.isConnected) {
-      taskDrag = null
-      return
-    }
-    drag.active = true
-    row.setPointerCapture(event.pointerId)
-    row.classList.add('is-dragging')
-    triggerHaptic(12)
-  }, 360)
-}
-
-function moveTaskDrag(event: PointerEvent): void {
-  const drag = taskDrag
-  if (!drag || drag.pointerId !== event.pointerId) return
-  if (!drag.active) {
-    if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 8) endTaskDrag(event)
-    return
-  }
-
-  drag.target?.classList.remove('drop-before', 'drop-after')
-  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.task-row')
-  drag.target = target && target !== drag.row && target.parentElement === drag.row.parentElement ? target : null
-  if (drag.target) {
-    const rect = drag.target.getBoundingClientRect()
-    drag.after = event.clientY > rect.top + rect.height / 2
-    drag.target.classList.add(drag.after ? 'drop-after' : 'drop-before')
-  }
-  if (event.clientY < 100) window.scrollBy(0, -14)
-  else if (event.clientY > window.innerHeight - 110) window.scrollBy(0, 14)
-}
-
-function endTaskDrag(event: PointerEvent): void {
-  const drag = taskDrag
-  if (!drag || drag.pointerId !== event.pointerId) return
-  taskDrag = null
-  window.clearTimeout(drag.timer)
-  drag.row.classList.remove('is-dragging')
-  drag.target?.classList.remove('drop-before', 'drop-after')
-  if (event.type !== 'pointerup' || !drag.target || !drag.row.parentElement) return
-
-  const rows = [...drag.row.parentElement.querySelectorAll<HTMLElement>('.task-row')].filter((row) => row !== drag.row)
-  rows.splice(rows.indexOf(drag.target) + Number(drag.after), 0, drag.row)
-  const tasksById = new Map(data.tasks.map((task) => [task.id, task]))
-  rows.forEach((row, index) => {
-    const task = tasksById.get(row.dataset.taskId ?? '')
-    if (task) task.manualOrder = index
-  })
-  persist()
-  renderTasks()
-  showToast('顺序已保存')
-}
-
 function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string {
   const statusClass = task.status === 'active' ? '' : `is-${task.status}`
   const highlightClass = task.id === highlightedTaskId ? 'is-highlighted' : ''
@@ -771,7 +685,6 @@ function taskRow(task: Task, context: 'today' | 'history' | 'overview'): string 
         ${task.status === 'skipped' ? icons.skip : icons.check}
       </button>
       <div class="task-copy">
-        ${context !== 'overview' && task.status === 'active' ? '<span class="task-drag-grip" title="长按拖动排序" aria-hidden="true">⋮⋮</span>' : ''}
         <div class="task-title-row">
           <h3>${escapeHtml(task.title)}</h3>
           ${task.priority === 'high' ? '<span class="priority-mark">重要</span>' : ''}
@@ -1048,6 +961,7 @@ function renderBackupConfirmation(backup: AppData): void {
 
 function applyImportedBackup(): void {
   if (!pendingImportedData) return
+  for (const id of pendingTaskUndos.keys()) clearTaskUndo(id)
   data.tasks = pendingImportedData.tasks
   data.series = pendingImportedData.series
   data.summaries = pendingImportedData.summaries
@@ -1234,6 +1148,9 @@ function handleClick(event: MouseEvent): void {
       break
     case 'restore-task':
       if (id) restoreTask(id)
+      break
+    case 'undo-task':
+      if (id) undoTaskAction(id)
       break
     case 'delete-task':
       if (id) deleteTask(id)
@@ -1440,19 +1357,34 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     row?.classList.add('is-completing')
     row?.setAttribute('aria-busy', 'true')
 
+    const previousStatus = task.status
+    const previousStatusAt = task.statusAt
+    const completedAt = new Date().toISOString()
     task.status = 'completed'
-    task.statusAt = new Date().toISOString()
+    task.statusAt = completedAt
     persist()
     hideModal('taskModal')
     showToast('已完成', true)
     const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420
-    window.setTimeout(() => {
+    const completionTimer = window.setTimeout(() => {
+      if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) {
+        completingTasks.delete(taskId)
+        return
+      }
       highlightedTaskId = task.id
       render()
       scheduleHighlightClear(task.id)
       if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
       completingTasks.delete(taskId)
     }, delay)
+    offerTaskUndo('已完成', task.title, () => {
+      if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) return
+      window.clearTimeout(completionTimer)
+      completingTasks.delete(taskId)
+      task.status = previousStatus
+      task.statusAt = previousStatusAt
+      saveUndoResult('已撤回完成')
+    })
     return
   }
 
@@ -1499,16 +1431,69 @@ function deleteTask(taskId: string): void {
   const index = data.tasks.findIndex((item) => item.id === taskId)
   if (index === -1) return
   const [task] = data.tasks.splice(index, 1)
-  if (task.seriesId) {
-    const series = data.series.find((item) => item.id === task.seriesId)
-    if (series && !series.exceptions.includes(task.dueDate)) {
-      series.exceptions.push(task.dueDate)
-    }
-  }
+  const series = data.series.find((item) => item.id === task.seriesId)
+  const addedException = series && !series.exceptions.includes(task.dueDate)
+  if (addedException) series.exceptions.push(task.dueDate)
   persist()
   hideModal('taskModal')
   render()
   if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+  offerTaskUndo('已删除', task.title, () => {
+    if (data.tasks.some((item) => item.id === task.id)) return
+    if (series && data.series.includes(series)) {
+      if (addedException) series.exceptions = series.exceptions.filter((date) => date !== task.dueDate)
+    } else if (task.seriesId) {
+      delete task.seriesId
+    }
+    data.tasks.splice(index, 0, task)
+    saveUndoResult('已恢复清单')
+  })
+}
+
+const undoWindowMs = 3000
+const pendingTaskUndos = new Map<string, {
+  expiresAt: number
+  timer: number
+  row: HTMLElement
+  restore: () => void
+}>()
+
+function offerTaskUndo(message: string, title: string, restore: () => void): void {
+  const stack = document.querySelector<HTMLElement>('#undoStack')
+  if (!stack) return
+  const id = newId()
+  const row = document.createElement('div')
+  row.className = 'undo-bar'
+  row.innerHTML = `
+    <span role="status" title="${escapeHtml(title)}">${escapeHtml(message)} · ${escapeHtml(title)}</span>
+    <button type="button" data-action="undo-task" data-id="${id}" aria-label="3 秒内撤回：${escapeHtml(title)}">撤回</button>
+    <i aria-hidden="true"></i>
+  `
+  const expiresAt = performance.now() + undoWindowMs
+  const timer = window.setTimeout(() => clearTaskUndo(id), undoWindowMs)
+  pendingTaskUndos.set(id, { expiresAt, timer, row, restore })
+  stack.append(row)
+}
+
+function clearTaskUndo(id: string): void {
+  const undo = pendingTaskUndos.get(id)
+  if (!undo) return
+  window.clearTimeout(undo.timer)
+  undo.row.remove()
+  pendingTaskUndos.delete(id)
+}
+
+function undoTaskAction(id: string): void {
+  const undo = pendingTaskUndos.get(id)
+  clearTaskUndo(id)
+  if (undo && performance.now() < undo.expiresAt) undo.restore()
+}
+
+function saveUndoResult(message: string): void {
+  persist()
+  render()
+  if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+  showToast(message)
 }
 
 function stopSeries(taskId: string): void {
@@ -1559,9 +1544,6 @@ function sortTasks(tasks: Task[]): Task[] {
     if (a.status !== b.status) {
       const order: Record<TaskStatus, number> = { active: 0, completed: 1, skipped: 2 }
       return order[a.status] - order[b.status]
-    }
-    if (a.status === 'active' && (a.manualOrder != null || b.manualOrder != null) && a.manualOrder !== b.manualOrder) {
-      return (a.manualOrder ?? -1) - (b.manualOrder ?? -1)
     }
     const priorityDifference = (a.priority === 'high' ? 0 : 1) - (b.priority === 'high' ? 0 : 1)
     if (priorityDifference !== 0) return priorityDifference
