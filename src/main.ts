@@ -1309,7 +1309,10 @@ function addTask(): void {
   if (submitLabel) submitLabel.textContent = '已添加'
   render()
   hideModal('quickAddModal')
-  if (highlightedTaskId) scheduleHighlightClear(highlightedTaskId)
+  if (highlightedTaskId) {
+    scheduleHighlightClear(highlightedTaskId)
+    if (savedDate === viewDate) revealTaskRow(highlightedTaskId)
+  }
   if (savedDate !== viewDate) {
     showToast(`${savedRepeat ? '重复清单' : '清单'}已记在 ${shortDate(savedDate)}`)
   } else {
@@ -1359,15 +1362,14 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     hideModal('taskModal')
     showToast('已完成', true)
     highlightedTaskId = task.id
-    render()
+    renderWithTaskMovement(task.id)
     scheduleHighlightClear(task.id)
-    if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
     completingTasks.delete(taskId)
     offerTaskUndo('已完成', task.title, () => {
       if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) return
       task.status = previousStatus
       task.statusAt = previousStatusAt
-      saveUndoResult('已撤回完成')
+      saveUndoResult('已撤回完成', task.id)
     })
     return
   }
@@ -1430,7 +1432,7 @@ function deleteTask(taskId: string): void {
       delete task.seriesId
     }
     data.tasks.splice(index, 0, task)
-    saveUndoResult('已恢复清单')
+    saveUndoResult('已恢复清单', task.id)
   })
 }
 
@@ -1473,10 +1475,56 @@ function undoTaskAction(id: string): void {
   if (undo && performance.now() < undo.expiresAt) undo.restore()
 }
 
-function saveUndoResult(message: string): void {
-  persist()
+function taskMotionAllowed(): boolean {
+  return !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function renderWithTaskMovement(changedTaskId: string): void {
+  const animate = taskMotionAllowed()
+  const selector = '#taskList .task-row[data-task-id], #overviewBody .task-row[data-task-id]'
+  const keyOf = (row: HTMLElement) =>
+    `${row.closest('#overviewBody') ? 'overview' : 'list'}:${row.dataset.taskId}`
+  const oldPositions = new Map<string, number>()
+  if (animate) {
+    document.querySelectorAll<HTMLElement>(selector).forEach((row) => {
+      if (row.getClientRects().length) oldPositions.set(keyOf(row), row.getBoundingClientRect().top)
+    })
+  }
   render()
   if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+  if (!animate) return
+
+  document.querySelectorAll<HTMLElement>(selector).forEach((row) => {
+    if (row.dataset.taskId === changedTaskId || !row.getClientRects().length) return
+    const oldTop = oldPositions.get(keyOf(row))
+    if (oldTop === undefined) return
+    const offset = oldTop - row.getBoundingClientRect().top
+    if (Math.abs(offset) < 1) return
+    row.animate([{ translate: `0 ${offset}px` }, { translate: '0 0' }], {
+      duration: 180,
+      easing: 'cubic-bezier(.2,.75,.3,1)'
+    })
+  })
+}
+
+function revealTaskRow(taskId: string): void {
+  const overview = document.querySelector<HTMLElement>('#overviewModal:not([hidden])')
+  const scope = overview ?? document.querySelector('#taskList')
+  const row = scope?.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
+  if (!row) return
+  const bounds = row.getBoundingClientRect()
+  const bottomGap = overview ? 16 : 96
+  if (bounds.top < 16 || bounds.bottom > window.innerHeight - bottomGap) {
+    row.scrollIntoView({ block: 'center', behavior: taskMotionAllowed() ? 'smooth' : 'instant' })
+  }
+}
+
+function saveUndoResult(message: string, taskId: string): void {
+  persist()
+  highlightedTaskId = taskId
+  renderWithTaskMovement(taskId)
+  scheduleHighlightClear(taskId)
+  revealTaskRow(taskId)
   showToast(message)
 }
 
@@ -1499,10 +1547,17 @@ function stopSeries(taskId: string): void {
 }
 
 function setViewDate(date: string): void {
+  const changed = date !== viewDate
   viewDate = date
   calendarMonth = monthStart(date)
   draft = createDraft(date)
   render()
+  if (changed && taskMotionAllowed()) {
+    document.querySelector('#taskList')?.animate([{ opacity: 0.55 }, { opacity: 1 }], {
+      duration: 170,
+      easing: 'ease-out'
+    })
+  }
 }
 
 function activeForToday(): Task[] {
@@ -1574,9 +1629,8 @@ function sevenDayOverview(): Array<{
 function scheduleHighlightClear(taskId: string): void {
   if (highlightTimer) window.clearTimeout(highlightTimer)
   highlightTimer = window.setTimeout(() => {
-    document
-      .querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
-      ?.classList.remove('is-highlighted')
+    document.querySelectorAll<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
+      .forEach((row) => row.classList.remove('is-highlighted'))
     if (highlightedTaskId === taskId) highlightedTaskId = null
   }, 820)
 }
