@@ -1343,84 +1343,6 @@ function openQuickAdd(taskId?: string): void {
   titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
-const taskShatterMs = 620
-
-function shatterTaskCard(row: HTMLElement): HTMLElement | null {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
-  const bounds = row.getBoundingClientRect()
-  if (!bounds.width || !bounds.height || bounds.bottom < 0 || bounds.top > window.innerHeight) return null
-
-  const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d')
-  if (!context) return null
-
-  const padding = 140
-  const width = bounds.width + padding * 2
-  const height = bounds.height + padding * 2
-  const scale = Math.min(window.devicePixelRatio || 1, 2)
-  canvas.className = 'task-shatter-dust'
-  canvas.setAttribute('aria-hidden', 'true')
-  canvas.style.left = `${bounds.left - padding}px`
-  canvas.style.top = `${bounds.top - padding}px`
-  canvas.style.width = `${width}px`
-  canvas.style.height = `${height}px`
-  canvas.width = Math.ceil(width * scale)
-  canvas.height = Math.ceil(height * scale)
-  context.scale(scale, scale)
-
-  const ribbonColors = ['#ff3865', '#ff8b24', '#ffd21c', '#38dd58', '#00d8bc', '#20c4ff', '#5980ff', '#cf59ff']
-  const count = 64
-  const particles = Array.from({ length: count }, (_, index) => {
-    const spread = (index + Math.random()) / count * 2 - 1
-    const angle = spread * 1.1
-    const reach = 44 + Math.random() * 62
-    const x = 0.5 + spread * 0.43
-    const y = 0.26 + Math.random() * 0.44
-    return {
-      x: padding + x * bounds.width,
-      y: padding + y * bounds.height,
-      dx: Math.sin(angle) * reach,
-      dy: Math.cos(angle) * reach,
-      width: 3.4 + Math.random() * 3.1,
-      length: 8 + Math.random() * 8,
-      angle: Math.random() * Math.PI,
-      spin: (Math.random() - 0.5) * Math.PI * 3,
-      opacity: 0.86 + Math.random() * 0.14,
-      color: ribbonColors[Math.floor(Math.random() * ribbonColors.length)]
-    }
-  })
-
-  document.body.append(canvas)
-  row.classList.add('is-shattering')
-  const start = performance.now()
-  const draw = (now: number) => {
-    if (!canvas.isConnected) return
-    const time = Math.min(1, Math.max(0, (now - start) / taskShatterMs))
-    const spread = 0.68 * time + 0.32 * time ** 2
-    const fall = 0.23 * time + 0.77 * time ** 2
-    context.clearRect(0, 0, width, height)
-    for (const particle of particles) {
-      const x = particle.x + particle.dx * spread
-      const y = particle.y + particle.dy * fall
-      const angle = particle.angle + particle.spin * time
-      const cos = Math.cos(angle)
-      const sin = Math.sin(angle)
-      const ribbonWidth = particle.width * (0.55 + 0.45 * Math.abs(Math.cos(angle * 1.5)))
-      const ribbonLength = particle.length * (1 - time * 0.16)
-      context.setTransform(cos * scale, sin * scale, -sin * scale, cos * scale, x * scale, y * scale)
-      const fade = Math.max(0, (time - 0.57) / 0.43)
-      context.globalAlpha = particle.opacity * (1 - fade ** 1.45)
-      context.fillStyle = particle.color
-      context.fillRect(-ribbonLength / 2, -ribbonWidth / 2, ribbonLength, ribbonWidth)
-    }
-    context.setTransform(scale, 0, 0, scale, 0, 0)
-    if (time < 1) requestAnimationFrame(draw)
-    else canvas.remove()
-  }
-  draw(start)
-  return canvas
-}
-
 function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void {
   const task = data.tasks.find((item) => item.id === taskId)
   if (!task || completingTasks.has(taskId)) return
@@ -1428,11 +1350,6 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
   triggerHaptic(status === 'completed' ? [12, 22, 16] : 16)
 
   if (status === 'completed') {
-    const overviewOpen = !document.querySelector<HTMLElement>('#overviewModal')?.hidden
-    const scope = overviewOpen ? document.querySelector<HTMLElement>('#overviewModal') : document
-    const row = scope?.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
-    const shatter = row ? shatterTaskCard(row) : null
-
     const previousStatus = task.status
     const previousStatusAt = task.statusAt
     const completedAt = new Date().toISOString()
@@ -1441,23 +1358,13 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     persist()
     hideModal('taskModal')
     showToast('已完成', true)
-    const completionTimer = window.setTimeout(() => {
-      shatter?.remove()
-      if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) {
-        completingTasks.delete(taskId)
-        return
-      }
-      highlightedTaskId = task.id
-      render()
-      scheduleHighlightClear(task.id)
-      if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
-      completingTasks.delete(taskId)
-    }, shatter ? taskShatterMs : 0)
+    highlightedTaskId = task.id
+    render()
+    scheduleHighlightClear(task.id)
+    if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+    completingTasks.delete(taskId)
     offerTaskUndo('已完成', task.title, () => {
       if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) return
-      window.clearTimeout(completionTimer)
-      shatter?.remove()
-      completingTasks.delete(taskId)
       task.status = previousStatus
       task.statusAt = previousStatusAt
       saveUndoResult('已撤回完成')

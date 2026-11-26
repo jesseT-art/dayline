@@ -17,18 +17,3 @@
   background: var(--success);
   color: var(--surface);
 }
-
-.task-row.is-shattering {
-  pointer-events: none;
-  animation: task-dust-source 105ms ease-out both;
-}
-
-.task-shatter-dust {
-  position: fixed;
-  z-index: 85;
-  pointer-events: none;
-}
-
-@keyframes task-dust-source {
-  to { opacity: 0; }
-}
