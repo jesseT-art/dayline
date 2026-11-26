@@ -1355,13 +1355,18 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   layer.setAttribute('aria-hidden', 'true')
   layer.inert = true
 
-  const points = [
-    [[0, 0], [29, 0], [66, 0], [100, 0]],
-    [[0, 45], [37, 62], [61, 35], [100, 54]],
-    [[0, 100], [25, 100], [73, 100], [100, 100]]
-  ]
-  for (let y = 0; y < 2; y++) {
-    for (let x = 0; x < 3; x++) {
+  const columns = 6
+  const rows = 4
+  const offset = (index: number, count: number) =>
+    index === 0 || index === count ? 0 : (Math.random() - 0.5) * 0.58
+  const points = Array.from({ length: rows + 1 }, (_, y) =>
+    Array.from({ length: columns + 1 }, (_, x) => [
+      (x + offset(x, columns)) * 100 / columns,
+      (y + offset(y, rows)) * 100 / rows
+    ])
+  )
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < columns; x++) {
       const topLeft = points[y][x]
       const topRight = points[y][x + 1]
       const bottomLeft = points[y + 1][x]
