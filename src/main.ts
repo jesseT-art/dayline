@@ -240,7 +240,6 @@ app.innerHTML = `
   </div>
 
   <div class="undo-stack" id="undoStack"></div>
-  <div class="toast-ribbons" id="toastRibbons" aria-hidden="true"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 `
 
@@ -1344,6 +1343,55 @@ function openQuickAdd(taskId?: string): void {
   titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
+const taskShatterMs = 460
+
+function shatterTaskCard(row: HTMLElement): HTMLElement | null {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
+  const bounds = row.getBoundingClientRect()
+  if (!bounds.width || !bounds.height || bounds.bottom < 0 || bounds.top > window.innerHeight) return null
+
+  const layer = document.createElement('div')
+  layer.className = 'task-shatter-layer'
+  layer.setAttribute('aria-hidden', 'true')
+  layer.inert = true
+
+  const points = [
+    [[0, 0], [29, 0], [66, 0], [100, 0]],
+    [[0, 45], [37, 62], [61, 35], [100, 54]],
+    [[0, 100], [25, 100], [73, 100], [100, 100]]
+  ]
+  for (let y = 0; y < 2; y++) {
+    for (let x = 0; x < 3; x++) {
+      const topLeft = points[y][x]
+      const topRight = points[y][x + 1]
+      const bottomLeft = points[y + 1][x]
+      const bottomRight = points[y + 1][x + 1]
+      for (const corners of [[topLeft, topRight, bottomLeft], [topRight, bottomRight, bottomLeft]]) {
+        const piece = document.createElement('div')
+        piece.className = 'task-shatter-piece'
+        piece.style.left = `${bounds.left}px`
+        piece.style.top = `${bounds.top}px`
+        piece.style.width = `${bounds.width}px`
+        piece.style.height = `${bounds.height}px`
+        piece.style.clipPath = `polygon(${corners.map(([px, py]) => `${px}% ${py}%`).join(',')})`
+        const center = corners.reduce(([cx, cy], [px, py]) => [cx + px / 3, cy + py / 3], [0, 0])
+        piece.style.transformOrigin = `${center[0]}% ${center[1]}%`
+        piece.style.setProperty('--shatter-x', `${(center[0] - 50) * 1.8}px`)
+        piece.style.setProperty('--shatter-y', `${(center[1] - 50) * 0.82 + 26}px`)
+        piece.style.setProperty('--shatter-spin', `${(center[0] - 50) * 0.6 + (center[1] - 50) * 0.35}deg`)
+        piece.style.animationDuration = `${taskShatterMs}ms`
+        const copy = row.cloneNode(true) as HTMLElement
+        copy.removeAttribute('data-task-id')
+        piece.append(copy)
+        layer.append(piece)
+      }
+    }
+  }
+  document.body.append(layer)
+  row.classList.add('is-shattering')
+  return layer
+}
+
 function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void {
   const task = data.tasks.find((item) => item.id === taskId)
   if (!task || completingTasks.has(taskId)) return
@@ -1354,8 +1402,7 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     const overviewOpen = !document.querySelector<HTMLElement>('#overviewModal')?.hidden
     const scope = overviewOpen ? document.querySelector<HTMLElement>('#overviewModal') : document
     const row = scope?.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
-    row?.classList.add('is-completing')
-    row?.setAttribute('aria-busy', 'true')
+    const shatter = row ? shatterTaskCard(row) : null
 
     const previousStatus = task.status
     const previousStatusAt = task.statusAt
@@ -1365,8 +1412,8 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     persist()
     hideModal('taskModal')
     showToast('已完成', true)
-    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420
     const completionTimer = window.setTimeout(() => {
+      shatter?.remove()
       if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) {
         completingTasks.delete(taskId)
         return
@@ -1376,10 +1423,11 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
       scheduleHighlightClear(task.id)
       if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
       completingTasks.delete(taskId)
-    }, delay)
+    }, shatter ? taskShatterMs : 0)
     offerTaskUndo('已完成', task.title, () => {
       if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) return
       window.clearTimeout(completionTimer)
+      shatter?.remove()
       completingTasks.delete(taskId)
       task.status = previousStatus
       task.statusAt = previousStatusAt
@@ -1663,51 +1711,15 @@ function handleModalBack(): void {
 
 let toastHideTimer: number | undefined
 
-function createToastRibbons(): string {
-  const colors = ['#ff415f', '#ff9026', '#ffcc00', '#30cb55', '#00ceb4', '#19b8ff', '#4169ff', '#ba53ff']
-  const reach = window.innerWidth * 0.49
-  const depth = Math.min(window.innerHeight * 0.58, 510)
-  const randomBetween = (min: number, max: number) => min + Math.random() * (max - min)
-
-  const count = 112
-  return Array.from({ length: count }, (_, index) => {
-    const lane = (index + Math.random()) / count * 2 - 1
-    const x = lane * reach
-    const start = lane * Math.min(window.innerWidth * 0.34, 190)
-    const y = depth * randomBetween(0.52, 1.06)
-    const width = randomBetween(4, 8)
-    const isDot = index % 4 === 0
-    const variables = {
-      color: colors[index % colors.length],
-      start: `${start.toFixed(1)}px`,
-      spread: `${(start + (x - start) * 0.72).toFixed(1)}px`,
-      drift: `${(x).toFixed(1)}px`,
-      rise: `${(y * 0.24 + 8).toFixed(1)}px`,
-      fall: `${(y + 55).toFixed(1)}px`,
-      width: `${width.toFixed(1)}px`,
-      height: `${(isDot ? width : randomBetween(8, 16)).toFixed(1)}px`,
-      spin: `${((index % 2 === 0 ? -1 : 1) * randomBetween(190, 680)).toFixed(0)}deg`,
-      duration: `${randomBetween(1400, 2110).toFixed(0)}ms`
-    }
-    const style = Object.entries(variables).map(([key, value]) => `--${key}:${value}`).join(';')
-    return `<i style="${style}"></i>`
-  }).join('')
-}
-
 function showToast(message: string, celebrate = false): void {
   const toast = document.querySelector<HTMLElement>('#toast')
   if (!toast) return
   window.clearTimeout(toastHideTimer)
   toast.classList.toggle('is-celebration', celebrate)
-  const ribbons = celebrate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ? createToastRibbons()
-    : ''
   toast.innerHTML = `
     <span class="toast-icon" aria-hidden="true">${celebrate ? icons.check : icons.summary}</span>
     <span class="toast-message">${escapeHtml(message)}</span>
   `
-  const ribbonLayer = document.querySelector<HTMLElement>('#toastRibbons')
-  if (ribbonLayer && ribbons) ribbonLayer.innerHTML = ribbons
   toast.hidden = false
   requestAnimationFrame(() => toast.classList.add('is-visible'))
   if (toastTimer) window.clearTimeout(toastTimer)
@@ -1720,7 +1732,6 @@ function hideToast(): void {
   toast.classList.remove('is-visible')
   toastHideTimer = window.setTimeout(() => {
     toast.hidden = true
-    document.querySelector('#toastRibbons')?.replaceChildren()
   }, 180)
 }
 

@@ -7,99 +7,52 @@
 }
 
 .is-completed .complete-button svg,
-.is-skipped .complete-button svg,
-.is-completing .complete-button svg {
+.is-skipped .complete-button svg {
   opacity: 1;
   transform: scale(1);
 }
 
-.is-completed .complete-button,
-.is-completing .complete-button {
+.is-completed .complete-button {
   border-color: var(--success);
   background: var(--success);
   color: var(--surface);
 }
 
-.task-row.is-completing {
-  position: relative;
-  pointer-events: none;
-  animation: task-complete-out 420ms cubic-bezier(0.2, 0.78, 0.22, 1) both;
+/* Each fragment shows a clipped copy of the card at its original position. */
+.task-row.is-shattering {
+  visibility: hidden;
 }
 
-.task-row.is-completing::after {
+.task-shatter-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.task-shatter-piece {
+  position: absolute;
+  animation: task-shatter-out 460ms cubic-bezier(.14,.7,.32,1) both;
+}
+
+.task-shatter-piece .task-row {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background:
-    linear-gradient(
-      92deg,
-      color-mix(in srgb, var(--accent-2) 35%, white),
-      color-mix(in srgb, var(--accent) 30%, white) 54%,
-      color-mix(in srgb, var(--accent-3) 38%, white)
-    );
-  content: "";
-  pointer-events: none;
-  transform: scaleX(0);
-  transform-origin: left center;
-  animation: completion-fill-sweep 290ms cubic-bezier(0.18, 0.8, 0.2, 1) both;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  animation: none;
+  transform: none;
+  content-visibility: visible;
 }
 
-.task-row.is-completing > * {
-  position: relative;
-  z-index: 1;
-}
-
-.is-completing .complete-button {
-  animation: complete-check-pop 380ms cubic-bezier(0.2, 0.85, 0.25, 1.2) both;
-}
-
-.is-completing .complete-button svg path {
-  animation: complete-check-draw 260ms 80ms ease-out both;
-}
-
-@keyframes task-complete-out {
-  0% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  64% {
-    opacity: 1;
-    transform: translate3d(0, -1px, 0) scale(1.004);
-  }
+@keyframes task-shatter-out {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  30% { opacity: .96; }
   100% {
     opacity: 0;
-    transform: translate3d(0, 10px, 0) scale(0.975);
-  }
-}
-
-@keyframes completion-fill-sweep {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes complete-check-pop {
-  0% {
-    transform: scale(0.82);
-  }
-  55% {
-    transform: scale(1.16);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes complete-check-draw {
-  from {
-    stroke-dasharray: 24;
-    stroke-dashoffset: 24;
-  }
-  to {
-    stroke-dasharray: 24;
-    stroke-dashoffset: 0;
+    transform: translate(var(--shatter-x), var(--shatter-y)) rotate(var(--shatter-spin)) scale(.73);
   }
 }

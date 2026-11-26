@@ -3643,49 +3643,9 @@ body {
 }
 .toast-icon svg { width: 16px; height: 16px; }
 .is-celebration .toast-icon { background: #176945; color: white; }
-.toast-ribbons {
-  position: fixed;
-  inset: 0;
-  z-index: 89;
-  overflow: hidden;
-  pointer-events: none;
-}
-.toast-ribbons i {
-  position: absolute;
-  top: -2px;
-  left: 50%;
-  width: var(--width);
-  height: var(--height);
-  border-radius: 50%;
-  background: var(--color);
-  opacity: 0;
-  animation: toast-ribbon-fall var(--duration) both;
-}
-
-.toast-ribbons i:nth-child(3n) { border-radius: 2px; }
-
-@keyframes toast-ribbon-fall {
-  0% {
-    opacity: 1;
-    transform: translate3d(var(--start), 0, 0) rotate(0deg) scale(.88);
-    animation-timing-function: cubic-bezier(.12,.59,.46,.82);
-  }
-  13% {
-    opacity: 1;
-    transform: translate3d(var(--spread), var(--rise), 0) rotate(calc(var(--spin) * .34)) scale(1);
-    animation-timing-function: cubic-bezier(.26,.44,.53,.85);
-  }
-  78% { opacity: .92; }
-  100% {
-    opacity: 0;
-    transform: translate3d(var(--drift), var(--fall), 0) rotate(var(--spin)) scale(.78);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .toast, .toast.is-visible { transform: none; transition: none; }
-  .toast-ribbons { display: none; }
 }
-
 
 .undo-stack {
   position: fixed;
