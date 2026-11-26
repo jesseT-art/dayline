@@ -1343,7 +1343,7 @@ function openQuickAdd(taskId?: string): void {
   titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
-const taskShatterMs = 540
+const taskShatterMs = 620
 
 function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
@@ -1354,7 +1354,7 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   const context = canvas.getContext('2d')
   if (!context) return null
 
-  const padding = 94
+  const padding = 140
   const width = bounds.width + padding * 2
   const height = bounds.height + padding * 2
   const scale = Math.min(window.devicePixelRatio || 1, 2)
@@ -1369,21 +1369,23 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   context.scale(scale, scale)
 
   const ribbonColors = ['#ff3865', '#ff8b24', '#ffd21c', '#38dd58', '#00d8bc', '#20c4ff', '#5980ff', '#cf59ff']
-  const count = Math.max(360, Math.min(720, Math.round(bounds.width * bounds.height / 48)))
-  const particles = Array.from({ length: count }, () => {
-    const x = Math.random()
-    const y = Math.random()
+  const count = 64
+  const particles = Array.from({ length: count }, (_, index) => {
+    const spread = (index + Math.random()) / count * 2 - 1
+    const angle = spread * 1.1
+    const reach = 44 + Math.random() * 62
+    const x = 0.5 + spread * 0.43
+    const y = 0.26 + Math.random() * 0.44
     return {
       x: padding + x * bounds.width,
       y: padding + y * bounds.height,
-      dx: (x - 0.5) * 94 + (Math.random() - 0.5) * 60,
-      dy: (y - 0.5) * 68 + (Math.random() - 0.5) * 60,
-      width: 1.2 + Math.random() * 1.45,
-      length: 4.3 + Math.random() * 4.7,
+      dx: Math.sin(angle) * reach,
+      dy: Math.cos(angle) * reach,
+      width: 3.4 + Math.random() * 3.1,
+      length: 8 + Math.random() * 8,
       angle: Math.random() * Math.PI,
-      spin: (Math.random() - 0.5) * Math.PI * 5,
-      opacity: 0.77 + Math.random() * 0.23,
-      life: 0.72 + Math.random() * 0.28,
+      spin: (Math.random() - 0.5) * Math.PI * 3,
+      opacity: 0.86 + Math.random() * 0.14,
       color: ribbonColors[Math.floor(Math.random() * ribbonColors.length)]
     }
   })
@@ -1394,21 +1396,19 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   const draw = (now: number) => {
     if (!canvas.isConnected) return
     const time = Math.min(1, Math.max(0, (now - start) / taskShatterMs))
-    // Start visibly moving, then accelerate the ribbons out of the card.
-    const distance = 0.22 * time + 0.78 * time ** 2
+    const spread = 0.68 * time + 0.32 * time ** 2
+    const fall = 0.23 * time + 0.77 * time ** 2
     context.clearRect(0, 0, width, height)
     for (const particle of particles) {
-      const progress = time / particle.life
-      if (progress >= 1) continue
-      const x = particle.x + particle.dx * distance
-      const y = particle.y + particle.dy * distance + 22 * time ** 2
-      const angle = particle.angle + particle.spin * distance
+      const x = particle.x + particle.dx * spread
+      const y = particle.y + particle.dy * fall
+      const angle = particle.angle + particle.spin * time
       const cos = Math.cos(angle)
       const sin = Math.sin(angle)
       const ribbonWidth = particle.width * (0.55 + 0.45 * Math.abs(Math.cos(angle * 1.5)))
-      const ribbonLength = particle.length * (1 - progress * 0.3)
+      const ribbonLength = particle.length * (1 - time * 0.16)
       context.setTransform(cos * scale, sin * scale, -sin * scale, cos * scale, x * scale, y * scale)
-      const fade = Math.max(0, (progress - 0.52) / 0.48)
+      const fade = Math.max(0, (time - 0.57) / 0.43)
       context.globalAlpha = particle.opacity * (1 - fade ** 1.45)
       context.fillStyle = particle.color
       context.fillRect(-ribbonLength / 2, -ribbonWidth / 2, ribbonLength, ribbonWidth)
