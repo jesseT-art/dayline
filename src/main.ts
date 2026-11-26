@@ -239,7 +239,6 @@ app.innerHTML = `
     </section>
   </div>
 
-  <div class="undo-stack" id="undoStack"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 `
 
@@ -503,21 +502,16 @@ function renderTodaySummary(): void {
   `
 }
 
-let editingTaskId: string | null = null
-
 function renderComposer(): void {
   const host = document.querySelector<HTMLElement>('#composerHost')
   if (!host) return
   const isToday = viewDate === todayKey()
   const placeholder = isToday ? '今天要做什么？' : `为${shortDate(viewDate)}记一件事`
 
-  const editing = data.tasks.find((task) => task.id === editingTaskId)
-  document.querySelector('#quickAddTitle')!.textContent = editing ? '修改清单' : '添加清单'
-
   host.innerHTML = `
     <form class="composer task-composer" id="taskForm">
       <div class="composer-caption">
-        <span>${editing?.seriesId ? '仅修改这一次重复清单' : editing ? '更新清单内容' : '把待办写下来'}</span>
+        <span>把待办写下来</span>
         <em id="draftMeta"></em>
       </div>
       <label class="title-field">
@@ -546,10 +540,10 @@ function renderComposer(): void {
         <label class="choice-button date-choice">
           <span>日期</span>
           <strong id="taskDateDisplay">${escapeHtml(compactDateLabel(draft.dueDate))}</strong>
-          <input id="taskDate" name="date" type="date" value="${draft.dueDate}" ${editing?.seriesId ? 'disabled' : ''} />
+          <input id="taskDate" name="date" type="date" value="${draft.dueDate}" />
         </label>
       </div>
-      <div class="repeat-row" ${editing ? 'hidden' : ''}>
+      <div class="repeat-row">
         <div>
           <strong>每周重复</strong>
           <span>按所选星期，每周自动列出</span>
@@ -570,7 +564,7 @@ function renderComposer(): void {
       </div>
       <button class="submit-add-bar" id="submitAddButton" type="submit">
         <span class="submit-add-icon">${icons.plus}</span>
-        <span class="submit-add-label">${editing ? '保存修改' : '添加清单'}</span>
+        <span class="submit-add-label">添加清单</span>
         <span class="submit-add-hint">Enter</span>
       </button>
     </form>
@@ -960,7 +954,6 @@ function renderBackupConfirmation(backup: AppData): void {
 
 function applyImportedBackup(): void {
   if (!pendingImportedData) return
-  for (const id of pendingTaskUndos.keys()) clearTaskUndo(id)
   data.tasks = pendingImportedData.tasks
   data.series = pendingImportedData.series
   data.summaries = pendingImportedData.summaries
@@ -1000,7 +993,6 @@ function openTaskMenu(taskId: string): void {
       </button>
     </div>
     <div class="action-list">
-      <button type="button" data-action="edit-task" data-id="${task.id}">${icons.summary}<span>修改清单</span></button>
       ${
         task.status === 'active'
           ? `
@@ -1127,9 +1119,6 @@ function handleClick(event: MouseEvent): void {
       updateDraftUI()
       break
     }
-    case 'edit-task':
-      if (id) openQuickAdd(id)
-      break
     case 'open-task-menu':
       if (id) openTaskMenu(id)
       break
@@ -1147,9 +1136,6 @@ function handleClick(event: MouseEvent): void {
       break
     case 'restore-task':
       if (id) restoreTask(id)
-      break
-    case 'undo-task':
-      if (id) undoTaskAction(id)
       break
     case 'delete-task':
       if (id) deleteTask(id)
@@ -1252,20 +1238,6 @@ function addTask(): void {
   draft.title = title
   draft.note = noteInput?.value.trim() || ''
   draft.dueDate = dateInput?.value || viewDate
-  if (editingTaskId) {
-    const task = data.tasks.find((item) => item.id === editingTaskId)
-    if (!task) return
-    task.title = title
-    task.note = draft.note
-    task.priority = draft.priority
-    if (!task.seriesId) task.dueDate = draft.dueDate
-    editingTaskId = null
-    persist()
-    hideModal('quickAddModal')
-    render()
-    showToast('清单已修改')
-    return
-  }
   const timestamp = new Date().toISOString()
 
   const savedRepeat = draft.repeat
@@ -1309,10 +1281,7 @@ function addTask(): void {
   if (submitLabel) submitLabel.textContent = '已添加'
   render()
   hideModal('quickAddModal')
-  if (highlightedTaskId) {
-    scheduleHighlightClear(highlightedTaskId)
-    if (savedDate === viewDate) revealTaskRow(highlightedTaskId)
-  }
+  if (highlightedTaskId) scheduleHighlightClear(highlightedTaskId)
   if (savedDate !== viewDate) {
     showToast(`${savedRepeat ? '重复清单' : '清单'}已记在 ${shortDate(savedDate)}`)
   } else {
@@ -1320,25 +1289,8 @@ function addTask(): void {
   }
 }
 
-function openQuickAdd(taskId?: string): void {
-  const task = data.tasks.find((item) => item.id === taskId)
-  editingTaskId = task?.id ?? null
-  draft = createDraft(task?.dueDate ?? viewDate)
-  if (task) {
-    draft.title = task.title
-    draft.note = task.note
-    draft.priority = task.priority
-    const menu = document.getElementById('taskModal')
-    if (menu) {
-      menu.classList.remove('is-open')
-      menu.hidden = true
-    }
-    const menuIndex = modalHistory.lastIndexOf('taskModal')
-    if (menuIndex >= 0) {
-      modalHistory[menuIndex] = 'quickAddModal'
-      history.replaceState({ ...history.state, daylineModal: 'quickAddModal' }, '', location.href)
-    }
-  }
+function openQuickAdd(): void {
+  draft = createDraft(viewDate)
   renderComposer()
   showModal('quickAddModal')
   const titleInput = document.querySelector<HTMLInputElement>('#taskTitle')
@@ -1353,24 +1305,25 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
   triggerHaptic(status === 'completed' ? [12, 22, 16] : 16)
 
   if (status === 'completed') {
-    const previousStatus = task.status
-    const previousStatusAt = task.statusAt
-    const completedAt = new Date().toISOString()
+    const overviewOpen = !document.querySelector<HTMLElement>('#overviewModal')?.hidden
+    const scope = overviewOpen ? document.querySelector<HTMLElement>('#overviewModal') : document
+    const row = scope?.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
+    row?.classList.add('is-completing')
+    row?.setAttribute('aria-busy', 'true')
+
     task.status = 'completed'
-    task.statusAt = completedAt
+    task.statusAt = new Date().toISOString()
     persist()
     hideModal('taskModal')
-    showToast('已完成', true)
-    highlightedTaskId = task.id
-    renderWithTaskMovement(task.id)
-    scheduleHighlightClear(task.id)
-    completingTasks.delete(taskId)
-    offerTaskUndo('已完成', task.title, () => {
-      if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) return
-      task.status = previousStatus
-      task.statusAt = previousStatusAt
-      saveUndoResult('已撤回完成', task.id)
-    })
+    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420
+    window.setTimeout(() => {
+      highlightedTaskId = task.id
+      render()
+      scheduleHighlightClear(task.id)
+      if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+      completingTasks.delete(taskId)
+      showToast('已完成 · 已移至清单底部')
+    }, delay)
     return
   }
 
@@ -1417,115 +1370,16 @@ function deleteTask(taskId: string): void {
   const index = data.tasks.findIndex((item) => item.id === taskId)
   if (index === -1) return
   const [task] = data.tasks.splice(index, 1)
-  const series = data.series.find((item) => item.id === task.seriesId)
-  const addedException = series && !series.exceptions.includes(task.dueDate)
-  if (addedException) series.exceptions.push(task.dueDate)
+  if (task.seriesId) {
+    const series = data.series.find((item) => item.id === task.seriesId)
+    if (series && !series.exceptions.includes(task.dueDate)) {
+      series.exceptions.push(task.dueDate)
+    }
+  }
   persist()
   hideModal('taskModal')
   render()
   if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
-  offerTaskUndo('已删除', task.title, () => {
-    if (data.tasks.some((item) => item.id === task.id)) return
-    if (series && data.series.includes(series)) {
-      if (addedException) series.exceptions = series.exceptions.filter((date) => date !== task.dueDate)
-    } else if (task.seriesId) {
-      delete task.seriesId
-    }
-    data.tasks.splice(index, 0, task)
-    saveUndoResult('已恢复清单', task.id)
-  })
-}
-
-const undoWindowMs = 3000
-const pendingTaskUndos = new Map<string, {
-  expiresAt: number
-  timer: number
-  row: HTMLElement
-  restore: () => void
-}>()
-
-function offerTaskUndo(message: string, title: string, restore: () => void): void {
-  const stack = document.querySelector<HTMLElement>('#undoStack')
-  if (!stack) return
-  const id = newId()
-  const row = document.createElement('div')
-  row.className = 'undo-bar'
-  row.innerHTML = `
-    <span role="status" title="${escapeHtml(title)}">${escapeHtml(message)} · ${escapeHtml(title)}</span>
-    <button type="button" data-action="undo-task" data-id="${id}" aria-label="3 秒内撤回：${escapeHtml(title)}">撤回</button>
-    <i aria-hidden="true"></i>
-  `
-  const expiresAt = performance.now() + undoWindowMs
-  const timer = window.setTimeout(() => clearTaskUndo(id), undoWindowMs)
-  pendingTaskUndos.set(id, { expiresAt, timer, row, restore })
-  stack.append(row)
-}
-
-function clearTaskUndo(id: string): void {
-  const undo = pendingTaskUndos.get(id)
-  if (!undo) return
-  window.clearTimeout(undo.timer)
-  undo.row.remove()
-  pendingTaskUndos.delete(id)
-}
-
-function undoTaskAction(id: string): void {
-  const undo = pendingTaskUndos.get(id)
-  clearTaskUndo(id)
-  if (undo && performance.now() < undo.expiresAt) undo.restore()
-}
-
-function taskMotionAllowed(): boolean {
-  return !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
-
-function renderWithTaskMovement(changedTaskId: string): void {
-  const animate = taskMotionAllowed()
-  const selector = '#taskList .task-row[data-task-id], #overviewBody .task-row[data-task-id]'
-  const keyOf = (row: HTMLElement) =>
-    `${row.closest('#overviewBody') ? 'overview' : 'list'}:${row.dataset.taskId}`
-  const oldPositions = new Map<string, number>()
-  if (animate) {
-    document.querySelectorAll<HTMLElement>(selector).forEach((row) => {
-      if (row.getClientRects().length) oldPositions.set(keyOf(row), row.getBoundingClientRect().top)
-    })
-  }
-  render()
-  if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
-  if (!animate) return
-
-  document.querySelectorAll<HTMLElement>(selector).forEach((row) => {
-    if (row.dataset.taskId === changedTaskId || !row.getClientRects().length) return
-    const oldTop = oldPositions.get(keyOf(row))
-    if (oldTop === undefined) return
-    const offset = oldTop - row.getBoundingClientRect().top
-    if (Math.abs(offset) < 1) return
-    row.animate([{ translate: `0 ${offset}px` }, { translate: '0 0' }], {
-      duration: 180,
-      easing: 'cubic-bezier(.2,.75,.3,1)'
-    })
-  })
-}
-
-function revealTaskRow(taskId: string): void {
-  const overview = document.querySelector<HTMLElement>('#overviewModal:not([hidden])')
-  const scope = overview ?? document.querySelector('#taskList')
-  const row = scope?.querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
-  if (!row) return
-  const bounds = row.getBoundingClientRect()
-  const bottomGap = overview ? 16 : 96
-  if (bounds.top < 16 || bounds.bottom > window.innerHeight - bottomGap) {
-    row.scrollIntoView({ block: 'center', behavior: taskMotionAllowed() ? 'smooth' : 'instant' })
-  }
-}
-
-function saveUndoResult(message: string, taskId: string): void {
-  persist()
-  highlightedTaskId = taskId
-  renderWithTaskMovement(taskId)
-  scheduleHighlightClear(taskId)
-  revealTaskRow(taskId)
-  showToast(message)
 }
 
 function stopSeries(taskId: string): void {
@@ -1547,17 +1401,10 @@ function stopSeries(taskId: string): void {
 }
 
 function setViewDate(date: string): void {
-  const changed = date !== viewDate
   viewDate = date
   calendarMonth = monthStart(date)
   draft = createDraft(date)
   render()
-  if (changed && taskMotionAllowed()) {
-    document.querySelector('#taskList')?.animate([{ opacity: 0.55 }, { opacity: 1 }], {
-      duration: 170,
-      easing: 'ease-out'
-    })
-  }
 }
 
 function activeForToday(): Task[] {
@@ -1629,8 +1476,9 @@ function sevenDayOverview(): Array<{
 function scheduleHighlightClear(taskId: string): void {
   if (highlightTimer) window.clearTimeout(highlightTimer)
   highlightTimer = window.setTimeout(() => {
-    document.querySelectorAll<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
-      .forEach((row) => row.classList.remove('is-highlighted'))
+    document
+      .querySelector<HTMLElement>(`.task-row[data-task-id="${cssEscape(taskId)}"]`)
+      ?.classList.remove('is-highlighted')
     if (highlightedTaskId === taskId) highlightedTaskId = null
   }, 820)
 }
@@ -1699,17 +1547,10 @@ function handleModalBack(): void {
   if (openModal?.id) hideModal(openModal.id, true)
 }
 
-let toastHideTimer: number | undefined
-
-function showToast(message: string, celebrate = false): void {
+function showToast(message: string): void {
   const toast = document.querySelector<HTMLElement>('#toast')
   if (!toast) return
-  window.clearTimeout(toastHideTimer)
-  toast.classList.toggle('is-celebration', celebrate)
-  toast.innerHTML = `
-    <span class="toast-icon" aria-hidden="true">${celebrate ? icons.check : icons.summary}</span>
-    <span class="toast-message">${escapeHtml(message)}</span>
-  `
+  toast.innerHTML = `<span>${escapeHtml(message)}</span>`
   toast.hidden = false
   requestAnimationFrame(() => toast.classList.add('is-visible'))
   if (toastTimer) window.clearTimeout(toastTimer)
@@ -1720,7 +1561,7 @@ function hideToast(): void {
   const toast = document.querySelector<HTMLElement>('#toast')
   if (!toast) return
   toast.classList.remove('is-visible')
-  toastHideTimer = window.setTimeout(() => {
+  window.setTimeout(() => {
     toast.hidden = true
   }, 180)
 }
