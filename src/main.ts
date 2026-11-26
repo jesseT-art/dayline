@@ -1680,16 +1680,41 @@ function handleModalBack(): void {
 
 let toastHideTimer: number | undefined
 
+function createToastRibbons(): string {
+  const colors = ['#ff415f', '#ff9026', '#ffcc00', '#30cb55', '#00ceb4', '#19b8ff', '#4169ff', '#ba53ff']
+  const reach = Math.min(window.innerWidth * 0.43, 460)
+  const depth = Math.min(window.innerHeight * 0.51, 460)
+  const randomBetween = (min: number, max: number) => min + Math.random() * (max - min)
+
+  return Array.from({ length: 58 }, (_, index) => {
+    const direction = index % 2 === 0 ? -1 : 1
+    const width = randomBetween(4, 8)
+    const isDot = index % 4 === 0
+    const variables = {
+      color: colors[index % colors.length],
+      start: `${randomBetween(-24, 24).toFixed(1)}px`,
+      spread: `${(direction * reach * randomBetween(0.12, 0.85)).toFixed(1)}px`,
+      drift: `${(direction * reach * randomBetween(0.15, 1.04)).toFixed(1)}px`,
+      rise: `${randomBetween(-37, 25).toFixed(1)}px`,
+      fall: `${(depth * randomBetween(0.44, 1)).toFixed(1)}px`,
+      width: `${width.toFixed(1)}px`,
+      height: `${(isDot ? width : randomBetween(8, 16)).toFixed(1)}px`,
+      spin: `${(direction * randomBetween(190, 680)).toFixed(0)}deg`,
+      duration: `${randomBetween(1400, 2110).toFixed(0)}ms`,
+      delay: `${randomBetween(0, 140).toFixed(0)}ms`
+    }
+    const style = Object.entries(variables).map(([key, value]) => `--${key}:${value}`).join(';')
+    return `<i style="${style}"></i>`
+  }).join('')
+}
+
 function showToast(message: string, celebrate = false): void {
   const toast = document.querySelector<HTMLElement>('#toast')
   if (!toast) return
   window.clearTimeout(toastHideTimer)
   toast.classList.toggle('is-celebration', celebrate)
   const ribbons = celebrate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ? Array.from({ length: 12 }, (_, index) => {
-        const drift = (index % 5 - 2) * 11
-        return `<i style="--x:${8 + index * 7.6}%;--drift:${drift}px;--delay:${index % 4 * 39}ms;--spin:${index % 2 ? 240 : -220}deg"></i>`
-      }).join('')
+    ? createToastRibbons()
     : ''
   toast.innerHTML = `
     <span class="toast-icon" aria-hidden="true">${celebrate ? icons.check : icons.summary}</span>
