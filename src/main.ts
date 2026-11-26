@@ -1343,7 +1343,7 @@ function openQuickAdd(taskId?: string): void {
   titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
-const taskShatterMs = 820
+const taskShatterMs = 540
 
 function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
@@ -1394,7 +1394,8 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   const draw = (now: number) => {
     if (!canvas.isConnected) return
     const time = Math.min(1, Math.max(0, (now - start) / taskShatterMs))
-    const distance = 1 - (1 - time) ** 2
+    // Start visibly moving, then accelerate the ribbons out of the card.
+    const distance = 0.22 * time + 0.78 * time ** 2
     context.clearRect(0, 0, width, height)
     for (const particle of particles) {
       const progress = time / particle.life
@@ -1407,7 +1408,8 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
       const ribbonWidth = particle.width * (0.55 + 0.45 * Math.abs(Math.cos(angle * 1.5)))
       const ribbonLength = particle.length * (1 - progress * 0.3)
       context.setTransform(cos * scale, sin * scale, -sin * scale, cos * scale, x * scale, y * scale)
-      context.globalAlpha = particle.opacity * (1 - progress ** 2.4)
+      const fade = Math.max(0, (progress - 0.52) / 0.48)
+      context.globalAlpha = particle.opacity * (1 - fade ** 1.45)
       context.fillStyle = particle.color
       context.fillRect(-ribbonLength / 2, -ribbonWidth / 2, ribbonLength, ribbonWidth)
     }
