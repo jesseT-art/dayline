@@ -1343,7 +1343,7 @@ function openQuickAdd(taskId?: string): void {
   titleInput?.setSelectionRange(titleInput.value.length, titleInput.value.length)
 }
 
-const taskShatterMs = 1050
+const taskShatterMs = 820
 
 function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
