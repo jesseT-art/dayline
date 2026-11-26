@@ -1368,15 +1368,7 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
   canvas.height = Math.ceil(height * scale)
   context.scale(scale, scale)
 
-  const theme = getComputedStyle(row)
-  const colors = ['--accent', '--accent-2', '--accent-3', '--ink']
-    .map((name) => theme.getPropertyValue(name).trim())
-  const contrast = theme.getPropertyValue('--ink').trim() || '#182244'
-  const particleShades = colors.map((color) => {
-    context.fillStyle = color || contrast
-    context.fillStyle = `color-mix(in srgb, ${context.fillStyle} 69%, ${contrast})`
-    return context.fillStyle
-  })
+  const ribbonColors = ['#ff3865', '#ff8b24', '#ffd21c', '#38dd58', '#00d8bc', '#20c4ff', '#5980ff', '#cf59ff']
   const count = Math.max(360, Math.min(720, Math.round(bounds.width * bounds.height / 48)))
   const particles = Array.from({ length: count }, () => {
     const x = Math.random()
@@ -1386,10 +1378,13 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
       y: padding + y * bounds.height,
       dx: (x - 0.5) * 94 + (Math.random() - 0.5) * 60,
       dy: (y - 0.5) * 68 + (Math.random() - 0.5) * 60,
-      size: 1.65 + Math.random() ** 1.5 * 3.1,
+      width: 1.2 + Math.random() * 1.45,
+      length: 4.3 + Math.random() * 4.7,
+      angle: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * Math.PI * 5,
       opacity: 0.77 + Math.random() * 0.23,
       life: 0.72 + Math.random() * 0.28,
-      color: particleShades[Math.floor(Math.random() * particleShades.length)]
+      color: ribbonColors[Math.floor(Math.random() * ribbonColors.length)]
     }
   })
 
@@ -1406,11 +1401,17 @@ function shatterTaskCard(row: HTMLElement): HTMLElement | null {
       if (progress >= 1) continue
       const x = particle.x + particle.dx * distance
       const y = particle.y + particle.dy * distance + 22 * time ** 2
-      const size = particle.size * (1 - progress * 0.38)
+      const angle = particle.angle + particle.spin * distance
+      const cos = Math.cos(angle)
+      const sin = Math.sin(angle)
+      const ribbonWidth = particle.width * (0.55 + 0.45 * Math.abs(Math.cos(angle * 1.5)))
+      const ribbonLength = particle.length * (1 - progress * 0.3)
+      context.setTransform(cos * scale, sin * scale, -sin * scale, cos * scale, x * scale, y * scale)
       context.globalAlpha = particle.opacity * (1 - progress ** 2.4)
       context.fillStyle = particle.color
-      context.fillRect(x, y, size, size)
+      context.fillRect(-ribbonLength / 2, -ribbonWidth / 2, ribbonLength, ribbonWidth)
     }
+    context.setTransform(scale, 0, 0, scale, 0, 0)
     if (time < 1) requestAnimationFrame(draw)
     else canvas.remove()
   }
