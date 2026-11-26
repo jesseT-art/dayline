@@ -1682,26 +1682,30 @@ let toastHideTimer: number | undefined
 
 function createToastRibbons(): string {
   const colors = ['#ff415f', '#ff9026', '#ffcc00', '#30cb55', '#00ceb4', '#19b8ff', '#4169ff', '#ba53ff']
-  const reach = Math.min(window.innerWidth * 0.43, 460)
-  const depth = Math.min(window.innerHeight * 0.51, 460)
+  const reach = Math.min(window.innerWidth * 0.47, 520)
+  const depth = Math.min(window.innerHeight * 0.58, 510)
   const randomBetween = (min: number, max: number) => min + Math.random() * (max - min)
 
-  return Array.from({ length: 58 }, (_, index) => {
-    const direction = index % 2 === 0 ? -1 : 1
+  const count = 64
+  return Array.from({ length: count }, (_, index) => {
+    const ray = ((index + Math.random()) / count * 2 - 1) * 1.23
+    const distance = randomBetween(0.45, 1)
+    const x = Math.sin(ray) * reach * distance
+    const y = Math.cos(ray) * depth * distance
     const width = randomBetween(4, 8)
     const isDot = index % 4 === 0
     const variables = {
       color: colors[index % colors.length],
-      start: `${randomBetween(-24, 24).toFixed(1)}px`,
-      spread: `${(direction * reach * randomBetween(0.12, 0.85)).toFixed(1)}px`,
-      drift: `${(direction * reach * randomBetween(0.15, 1.04)).toFixed(1)}px`,
-      rise: `${randomBetween(-37, 25).toFixed(1)}px`,
-      fall: `${(depth * randomBetween(0.44, 1)).toFixed(1)}px`,
+      start: `${randomBetween(-12, 12).toFixed(1)}px`,
+      spread: `${(x * 0.67).toFixed(1)}px`,
+      drift: `${(x).toFixed(1)}px`,
+      rise: `${(y * 0.43 + 12).toFixed(1)}px`,
+      fall: `${(y + 55).toFixed(1)}px`,
       width: `${width.toFixed(1)}px`,
       height: `${(isDot ? width : randomBetween(8, 16)).toFixed(1)}px`,
-      spin: `${(direction * randomBetween(190, 680)).toFixed(0)}deg`,
+      spin: `${((index % 2 === 0 ? -1 : 1) * randomBetween(190, 680)).toFixed(0)}deg`,
       duration: `${randomBetween(1400, 2110).toFixed(0)}ms`,
-      delay: `${randomBetween(0, 140).toFixed(0)}ms`
+      delay: `${randomBetween(0, 55).toFixed(0)}ms`
     }
     const style = Object.entries(variables).map(([key, value]) => `--${key}:${value}`).join(';')
     return `<i style="${style}"></i>`

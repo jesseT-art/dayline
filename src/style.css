@@ -3681,7 +3681,7 @@ body {
 }
 .toast-ribbons i {
   position: absolute;
-  top: 60%;
+  top: 86%;
   left: 50%;
   width: var(--width);
   height: var(--height);
@@ -3700,10 +3700,10 @@ body {
     animation-timing-function: cubic-bezier(.12,.76,.24,1);
   }
   5% { opacity: 1; }
-  22% {
+  19% {
     opacity: 1;
     transform: translate3d(var(--spread), var(--rise), 0) rotate(calc(var(--spin) * .34)) scale(1);
-    animation-timing-function: cubic-bezier(.18,.44,.37,.96);
+    animation-timing-function: cubic-bezier(.24,.54,.48,.92);
   }
   78% { opacity: .92; }
   100% {
