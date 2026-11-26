@@ -11,11 +11,6 @@ const priorities: Priority[] = ['high', 'normal']
 export function createDefaultData(): AppData {
   return {
     version: 1,
-    priorityLevels: [
-      { id: 'now', name: '现在做' },
-      { id: 'next', name: '接下来' },
-      { id: 'later', name: '稍后' }
-    ],
     tasks: [],
     series: [],
     summaries: [],
@@ -101,12 +96,6 @@ function normalizeData(parsed: Partial<AppData>): AppData {
   const preferences = parsed.preferences
   return {
     version: 1,
-    priorityLevels: Array.isArray(parsed.priorityLevels)
-      ? parsed.priorityLevels.filter((level) =>
-          typeof level?.id === 'string' && /^[a-zA-Z0-9_-]+$/.test(level.id) &&
-          level.id !== 'unassigned' && typeof level.name === 'string' && level.name.trim()
-        ).filter((level, index, levels) => levels.findIndex((item) => item.id === level.id) === index)
-      : defaults.priorityLevels,
     tasks,
     series,
     summaries,
