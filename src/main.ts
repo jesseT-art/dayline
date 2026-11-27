@@ -239,6 +239,7 @@ app.innerHTML = `
     </section>
   </div>
 
+  <div class="completion-notices" id="completionNotices"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 `
 
@@ -1311,19 +1312,35 @@ function finishTask(taskId: string, status: Exclude<TaskStatus, 'active'>): void
     row?.classList.add('is-completing')
     row?.setAttribute('aria-busy', 'true')
 
+    const previousStatus = task.status
+    const previousStatusAt = task.statusAt
+    const completedAt = new Date().toISOString()
     task.status = 'completed'
-    task.statusAt = new Date().toISOString()
+    task.statusAt = completedAt
     persist()
     hideModal('taskModal')
     const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420
-    window.setTimeout(() => {
+    const completionTimer = window.setTimeout(() => {
+      completingTasks.delete(taskId)
+      if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) return
       highlightedTaskId = task.id
       render()
       scheduleHighlightClear(task.id)
       if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
-      completingTasks.delete(taskId)
-      showToast('已完成 · 已移至清单底部')
     }, delay)
+    showCompletionNotice(task.title, () => {
+      if (!data.tasks.includes(task) || task.status !== 'completed' || task.statusAt !== completedAt) return
+      window.clearTimeout(completionTimer)
+      completingTasks.delete(taskId)
+      task.status = previousStatus
+      task.statusAt = previousStatusAt
+      persist()
+      highlightedTaskId = task.id
+      render()
+      scheduleHighlightClear(task.id)
+      if (!document.querySelector<HTMLElement>('#overviewModal')?.hidden) renderOverview()
+      showToast('已撤回完成')
+    })
     return
   }
 
@@ -1545,6 +1562,27 @@ function handleModalBack(): void {
   }
   const openModal = [...document.querySelectorAll<HTMLElement>('.modal-layer:not([hidden])')].at(-1)
   if (openModal?.id) hideModal(openModal.id, true)
+}
+
+function showCompletionNotice(title: string, undo: () => void): void {
+  const stack = document.querySelector('#completionNotices')
+  if (!stack) return
+  const notice = document.createElement('div')
+  notice.className = 'completion-notice'
+  notice.innerHTML = `
+    <span class="completion-notice-icon" aria-hidden="true">${icons.check}</span>
+    <span class="completion-notice-copy" role="status"><strong>已完成</strong><small>${escapeHtml(title)}</small></span>
+    <button type="button" aria-label="3 秒内撤回完成：${escapeHtml(title)}">撤回</button>
+    <i aria-hidden="true"></i>
+  `
+  const expiresAt = performance.now() + 3000
+  const timer = window.setTimeout(() => notice.remove(), 3000)
+  notice.querySelector('button')?.addEventListener('click', () => {
+    window.clearTimeout(timer)
+    notice.remove()
+    if (performance.now() < expiresAt) undo()
+  }, { once: true })
+  stack.prepend(notice)
 }
 
 function showToast(message: string): void {
